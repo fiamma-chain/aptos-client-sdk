@@ -1,0 +1,38 @@
+[package]
+name = "aptos-bridge-sdk"
+version = "0.1.0"
+edition = "2021"
+
+[[example]]
+name = "mint"
+path = "examples/mint.rs"
+
+[[example]]
+name = "burn"
+path = "examples/burn.rs"
+
+[[example]]
+name = "event_listener"
+path = "examples/event_listener.rs"
+
+[[example]]
+name = "query"
+path = "examples/query.rs"
+
+[dependencies]
+aptos-sdk = { git = "https://github.com/aptos-labs/aptos-core", branch = "devnet" }
+serde = { version = "1.0", features = ["derive"] }
+tokio = { version = "1.0", features = ["full"] }
+anyhow = "1.0"
+async-trait = "0.1"
+hex = "0.4"
+reqwest = { version = "0.11", features = ["json"] }
+serde_json = "1.0"
+url = "2.3"
+bcs = "0.1"
+thiserror = "1.0"
+sha2 = "0.10"
+
+[patch.crates-io]
+merlin = { git = "https://github.com/aptos-labs/merlin" }
+x25519-dalek = { git = "https://github.com/aptos-labs/x25519-dalek", branch = "zeroize_v1" }

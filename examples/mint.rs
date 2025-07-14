@@ -1,0 +1,154 @@
+//! Mint operation example
+//!
+//! This example shows how to use the Aptos Bridge SDK to mint tokens.
+
+use aptos_bridge_sdk::{
+    types::{Peg, ScriptType, TxProof},
+    utils::format_btc_amount,
+    BridgeClient, QueryClient,
+};
+use aptos_sdk::types::chain_id::ChainId;
+use std::env;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Get configuration from environment variables
+    let node_url = env::var("APTOS_NODE_URL")
+        .unwrap_or_else(|_| "https://fullnode.devnet.aptoslabs.com/v1".to_string());
+    let private_key =
+        env::var("PRIVATE_KEY").expect("PRIVATE_KEY environment variable is required");
+    let bridge_contract_address = env::var("BRIDGE_CONTRACT_ADDRESS")
+        .expect("BRIDGE_CONTRACT_ADDRESS environment variable is required");
+    let faucet_url = env::var("FAUCET_URL")
+        .unwrap_or_else(|_| "https://faucet.devnet.aptoslabs.com".to_string());
+
+    println!("🚀 Aptos Bridge Mint Example");
+    println!("Node URL: {}", node_url);
+    println!("Bridge Contract: {}", bridge_contract_address);
+    println!();
+
+    // Create Bridge client
+    let mut bridge_client =
+        BridgeClient::new(&node_url, &private_key, &bridge_contract_address).await?;
+
+    // Create query client
+    let query_client = QueryClient::new(&node_url, &bridge_contract_address)?;
+
+    // Query and print bridge configuration
+    println!("\n📋 Querying bridge configuration...");
+    query_client.print_bridge_config().await?;
+
+    // Create example pegs
+    println!("\n🔨 Creating example pegs...");
+    let pegs = create_example_pegs()?;
+    println!("✅ Created {} pegs", pegs.len());
+
+    // Display peg information
+    for (i, peg) in pegs.iter().enumerate() {
+        println!(
+            "Peg {}: {} to {}",
+            i + 1,
+            format_btc_amount(peg.value),
+            peg.to
+        );
+    }
+
+    // Validate mint parameters
+    println!("\n🔍 Validating mint parameters...");
+    match query_client.validate_mint_params(&pegs).await {
+        Ok(_) => println!("✅ Mint parameters are valid"),
+        Err(e) => {
+            println!("❌ Mint parameter validation failed: {}", e);
+            println!("💡 Please check your peg data and bridge configuration");
+            return Ok(());
+        }
+    }
+
+    // Execute mint operation
+    println!("\n🏗️  Executing mint operation...");
+    let tx_hash = bridge_client.mint(pegs).await?;
+
+    println!("✅ Mint transaction submitted!");
+    println!("Transaction hash: {}", tx_hash);
+
+    // Wait for transaction confirmation
+    println!("\n⏳ Waiting for transaction confirmation...");
+    match bridge_client.wait_for_transaction(&tx_hash, 60).await {
+        Ok(status) => {
+            println!("✅ Transaction confirmed!");
+            println!("Final status: {:?}", status);
+        }
+        Err(e) => {
+            println!("❌ Transaction confirmation failed: {}", e);
+            println!(
+                "💡 You can check the transaction status later using the hash: {}",
+                tx_hash
+            );
+        }
+    }
+
+    println!("\n🎉 Mint operation completed!");
+    print_usage();
+
+    Ok(())
+}
+
+fn create_example_pegs() -> Result<Vec<Peg>, Box<dyn std::error::Error>> {
+    let pegs = vec![Peg {
+        to: "0x1".to_string(),
+        value: 50000000, // 0.5 BTC
+        block_num: 850000,
+        inclusion_proof: TxProof {
+            block_header: vec![
+                0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            ],
+            tx_id: vec![
+                0xa1, 0xb2, 0xc3, 0xd4, 0xe5, 0xf6, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e,
+                0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c,
+                0x1d, 0x1e, 0x1f, 0x20,
+            ],
+            tx_index: 0,
+            merkle_proof: vec![vec![
+                0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e,
+                0x2f, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3a, 0x3b, 0x3c,
+                0x3d, 0x3e, 0x3f, 0x40,
+            ]],
+            raw_tx: vec![
+                0x01, 0x00, 0x00, 0x00, 0x01, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49,
+                0x4a, 0x4b, 0x4c, 0x4d, 0x4e, 0x4f, 0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57,
+                0x58, 0x59, 0x5a, 0x5b, 0x5c, 0x5d, 0x5e, 0x5f, 0x60, 0x00, 0x00, 0x00, 0x00, 0x00,
+                0x19, 0x76, 0xa9, 0x14, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6a,
+                0x6b, 0x6c, 0x6d, 0x6e, 0x6f, 0x70, 0x71, 0x72, 0x73, 0x74, 0x88, 0xac, 0x01, 0x00,
+                0x00, 0x00, 0x00, 0x17, 0xa9, 0x14, 0x75, 0x76, 0x77, 0x78, 0x79, 0x7a, 0x7b, 0x7c,
+                0x7d, 0x7e, 0x7f, 0x80, 0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x87, 0x00,
+                0x00, 0x00, 0x00,
+            ],
+        },
+        tx_out_ix: 0,
+        dest_script_hash: vec![
+            0x89, 0x8a, 0x8b, 0x8c, 0x8d, 0x8e, 0x8f, 0x90, 0x91, 0x92, 0x93, 0x94, 0x95, 0x96,
+            0x97, 0x98, 0x99, 0x9a, 0x9b, 0x9c,
+        ],
+        script_type: ScriptType::P2PKH,
+    }];
+
+    Ok(pegs)
+}
+
+fn print_usage() {
+    println!("\n📖 Usage:");
+    println!("Set the following environment variables:");
+    println!("  APTOS_NODE_URL=https://fullnode.devnet.aptoslabs.com/v1");
+    println!("  PRIVATE_KEY=your_private_key_here");
+    println!("  BRIDGE_CONTRACT_ADDRESS=contract_address_here");
+    println!("  FAUCET_URL=https://faucet.devnet.aptoslabs.com (optional)");
+    println!("\nExample:");
+    println!("  export PRIVATE_KEY=0x1234567890abcdef...");
+    println!("  export BRIDGE_CONTRACT_ADDRESS=0x123...");
+    println!("  cargo run --example mint");
+}
