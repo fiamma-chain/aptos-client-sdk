@@ -111,7 +111,7 @@ impl EventMonitor {
                     sequence_number: event.sequence_number.into(),
                     event: mint_event,
                 }),
-                Err(e) => eprintln!("Failed to parse mint event: {}", e),
+                Err(e) => return Err(e),
             }
         }
 
@@ -156,7 +156,7 @@ impl EventMonitor {
                     sequence_number: event.sequence_number.into(),
                     event: burn_event,
                 }),
-                Err(e) => eprintln!("Failed to parse burn event: {}", e),
+                Err(e) => return Err(e),
             }
         }
 

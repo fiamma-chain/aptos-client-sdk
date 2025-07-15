@@ -11,22 +11,14 @@ use std::env;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    dotenv::dotenv().ok();
     // Get configuration from environment variables
-    let node_url = env::var("APTOS_NODE_URL")
-        .unwrap_or_else(|_| "https://fullnode.devnet.aptoslabs.com/v1".to_string());
+    let node_url = "https://fullnode.testnet.aptoslabs.com/v1";
     let private_key =
         env::var("PRIVATE_KEY").expect("PRIVATE_KEY environment variable is required");
-    let bridge_contract_address = env::var("BRIDGE_CONTRACT_ADDRESS")
-        .expect("BRIDGE_CONTRACT_ADDRESS environment variable is required");
-    let btc_light_client =
-        env::var("BTC_LIGHT_CLIENT").expect("BTC_LIGHT_CLIENT environment variable is required");
+    let bridge_contract_address = "0x1234567890123456789012345678901234567890";
+    let btc_light_client = "0x1234567890123456789012345678901234567890";
 
-    println!("🚀 Aptos Bridge Mint Example");
-    println!("Node URL: {}", node_url);
-    println!("Bridge Contract: {}", bridge_contract_address);
-    println!();
-
-    // Create Bridge client
     let mut bridge_client = BridgeClient::new(
         &node_url,
         &private_key,
@@ -36,9 +28,7 @@ async fn main() -> Result<()> {
     .await?;
 
     // Create example pegs
-    println!("\n🔨 Creating example pegs...");
     let pegs = create_example_pegs()?;
-    println!("✅ Created {} pegs", pegs.len());
 
     // Display peg information
     for (i, peg) in pegs.iter().enumerate() {
@@ -46,14 +36,9 @@ async fn main() -> Result<()> {
     }
 
     // Execute mint operation
-    println!("\n🏗️  Executing mint operation...");
     let tx_hash = bridge_client.mint(pegs).await?;
 
-    println!("✅ Mint transaction submitted!");
-    println!("Transaction hash: {}", tx_hash);
-
-    println!("\n🎉 Mint operation completed!");
-    print_usage();
+    println!("Mint transaction hash: {}", tx_hash);
 
     Ok(())
 }
@@ -103,19 +88,4 @@ fn create_example_pegs() -> Result<Vec<Peg>> {
     }];
 
     Ok(pegs)
-}
-
-fn print_usage() {
-    println!("\n📖 Usage:");
-    println!("Set the following environment variables:");
-    println!("  APTOS_NODE_URL=https://fullnode.devnet.aptoslabs.com/v1");
-    println!("  PRIVATE_KEY=your_private_key_here");
-    println!("  BRIDGE_CONTRACT_ADDRESS=contract_address_here");
-    println!("  BTC_LIGHT_CLIENT=btc_light_client_address_here");
-    println!("  FAUCET_URL=https://faucet.devnet.aptoslabs.com (optional)");
-    println!("\nExample:");
-    println!("  export PRIVATE_KEY=0x1234567890abcdef...");
-    println!("  export BRIDGE_CONTRACT_ADDRESS=0x123...");
-    println!("  export BTC_LIGHT_CLIENT=0x456...");
-    println!("  cargo run --example mint");
 }

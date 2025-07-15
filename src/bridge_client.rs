@@ -6,7 +6,7 @@ use crate::types::{constants::*, Peg, PegForBcs};
 use crate::utils::{parse_account_address, validate_btc_address};
 use crate::QueryClient;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use aptos_sdk::move_types::identifier::Identifier;
 use aptos_sdk::move_types::language_storage::ModuleId;
 use aptos_sdk::rest_client::aptos_api_types::{EntryFunctionId, IdentifierWrapper, MoveModuleId};
@@ -88,10 +88,6 @@ impl BridgeClient {
 
     /// Mint tokens
     pub async fn mint(&mut self, pegs: Vec<Peg>) -> Result<String> {
-        if pegs.is_empty() {
-            bail!("Pegs cannot be empty");
-        }
-
         // Convert to BCS-serializable format
         let pegs_for_bcs: Vec<PegForBcs> = pegs
             .iter()
@@ -130,11 +126,6 @@ impl BridgeClient {
     ) -> Result<String> {
         // Validate BTC address format
         validate_btc_address(&btc_address)?;
-
-        // Validate amount
-        if amount == 0 {
-            bail!("Amount cannot be zero");
-        }
 
         // Serialize parameters
         let args = vec![

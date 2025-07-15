@@ -137,6 +137,7 @@ impl EventHandler for CustomEventHandler {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    dotenv::dotenv().ok();
     println!("👂 Aptos Bridge Event Listener Example");
 
     // Get configuration from environment variables
