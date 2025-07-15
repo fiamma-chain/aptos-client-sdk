@@ -13,8 +13,9 @@ async fn main() -> Result<()> {
     let node_url = "https://fullnode.testnet.aptoslabs.com/v1";
     let private_key =
         env::var("PRIVATE_KEY").expect("PRIVATE_KEY environment variable is required");
-    let bridge_contract_address = "0x1234567890123456789012345678901234567890";
-    let btc_light_client = "0x1234567890123456789012345678901234567890";
+    let bridge_contract_address =
+        "0x348fb76b8668c1c4e5e0d0e9fe13b926dfeb309ec720947f4050ddc6c974d459";
+    let btc_light_client = "0x105deccf9cb2725b9312ed0cb532490448a261e86f21df67ade4d3dc4221e41a";
 
     let mut bridge_client = BridgeClient::new(
         &node_url,

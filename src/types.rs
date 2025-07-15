@@ -4,7 +4,7 @@
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use std::fmt;
+use std::{fmt, str::FromStr};
 
 /// Bitcoin transaction proof
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -24,16 +24,9 @@ pub struct TxProof {
 /// Bitcoin script type
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ScriptType {
-    /// P2PKH (Pay to Public Key Hash)
-    P2PKH = 0,
-    /// P2SH (Pay to Script Hash)
-    P2SH = 1,
-    /// P2WPKH (Pay to Witness Public Key Hash)
-    P2WPKH = 2,
-    /// P2WSH (Pay to Witness Script Hash)
-    P2WSH = 3,
-    /// P2TR (Pay to Taproot)
-    P2TR = 4,
+    P2SH = 0,  // Pay to Script Hash
+    P2WSH = 1, // Pay to Witness Script Hash
+    P2TR = 2,  // Pay to Taproot
 }
 
 /// Peg structure for mint operations
@@ -149,7 +142,7 @@ pub struct TxProofForBcs {
     pub block_header: Vec<u8>,
     pub tx_id: Vec<u8>,
     pub tx_index: u64,
-    pub merkle_proof: Vec<u8>,
+    pub tx_merkle_proof: Vec<u8>,
     pub raw_tx: Vec<u8>,
 }
 
@@ -157,23 +150,22 @@ impl TryFrom<&Peg> for PegForBcs {
     type Error = anyhow::Error;
 
     fn try_from(peg: &Peg) -> Result<Self> {
-        let to = aptos_sdk::types::account_address::AccountAddress::from_str_strict(&peg.to)
+        // Use from_str instead of from_str_strict for more lenient address parsing
+        let to = aptos_sdk::types::account_address::AccountAddress::from_str(&peg.to)
             .with_context(|| format!("Invalid address format: {}", peg.to))?;
 
         let inclusion_proof = TxProofForBcs {
             block_header: peg.inclusion_proof.block_header.clone(),
             tx_id: peg.inclusion_proof.tx_id.clone(),
             tx_index: peg.inclusion_proof.tx_index,
-            merkle_proof: peg.inclusion_proof.merkle_proof.clone(),
+            tx_merkle_proof: peg.inclusion_proof.merkle_proof.clone(),
             raw_tx: peg.inclusion_proof.raw_tx.clone(),
         };
 
         let script_type = match peg.script_type {
-            ScriptType::P2PKH => 0,
-            ScriptType::P2SH => 1,
-            ScriptType::P2WPKH => 2,
-            ScriptType::P2WSH => 3,
-            ScriptType::P2TR => 4,
+            ScriptType::P2SH => 0,
+            ScriptType::P2WSH => 1,
+            ScriptType::P2TR => 2,
         };
 
         Ok(PegForBcs {

@@ -2,12 +2,14 @@
 //!
 //! Provides various helper functions for type conversion, error handling, etc.
 
+use std::str::FromStr;
+
 use anyhow::{bail, Context, Result};
 use aptos_sdk::types::account_address::AccountAddress;
 
 /// Convert hex string to AccountAddress
 pub fn parse_account_address(addr_str: &str) -> Result<AccountAddress> {
-    AccountAddress::from_str_strict(addr_str)
+    AccountAddress::from_str(addr_str)
         .with_context(|| format!("Invalid address format: {}", addr_str))
 }
 

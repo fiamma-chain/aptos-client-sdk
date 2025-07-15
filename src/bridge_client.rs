@@ -12,7 +12,6 @@ use aptos_sdk::move_types::language_storage::ModuleId;
 use aptos_sdk::rest_client::aptos_api_types::{EntryFunctionId, IdentifierWrapper, MoveModuleId};
 use aptos_sdk::transaction_builder::TransactionBuilder;
 use aptos_sdk::{
-    crypto::ed25519::Ed25519PrivateKey,
     rest_client::{aptos_api_types::ViewRequest, Client},
     types::{
         account_address::AccountAddress,
@@ -59,23 +58,8 @@ impl BridgeClient {
         // Create query client
         let query_client = QueryClient::new(node_url)?;
 
-        // Create private key
-        let private_key_str = if private_key_hex.starts_with("0x") {
-            &private_key_hex[2..]
-        } else {
-            private_key_hex
-        };
-
-        let private_key = Ed25519PrivateKey::try_from(private_key_str.as_bytes())
+        let account = LocalAccount::from_private_key(private_key_hex, 0)
             .context("Invalid private key format")?;
-
-        // Create local account
-        let account = LocalAccount::new(
-            AccountAddress::from_str_strict(private_key_str)
-                .context("Invalid private key format")?,
-            private_key,
-            0,
-        );
 
         Ok(Self {
             rest_client,
@@ -94,18 +78,18 @@ impl BridgeClient {
             .map(|peg| PegForBcs::try_from(peg))
             .collect::<Result<Vec<_>, _>>()?;
 
-        // Serialize parameters
-        let args = vec![bcs::to_bytes(&pegs_for_bcs).context("Failed to serialize pegs for BCS")?];
+        // Serialize the vector as a single argument
+        let args = bcs::to_bytes(&pegs_for_bcs).context("Failed to serialize pegs for BCS")?;
 
         // Create Entry Function
         let entry_function = EntryFunction::new(
             ModuleId::new(
                 self.bridge_contract_address,
-                Identifier::new("fiamma_bridge_account").unwrap(),
+                Identifier::new("bridge").unwrap(),
             ),
             Identifier::new("mint").unwrap(),
             vec![], // No type parameters
-            args,
+            vec![args],
         );
 
         // Execute transaction
@@ -139,7 +123,7 @@ impl BridgeClient {
         let entry_function = EntryFunction::new(
             ModuleId::new(
                 self.bridge_contract_address,
-                Identifier::new("fiamma_bridge_account").unwrap(),
+                Identifier::new("bridge").unwrap(),
             ),
             Identifier::new("burn").unwrap(),
             vec![], // No type parameters
@@ -233,6 +217,13 @@ impl BridgeClient {
             .context("Failed to get chain ID from Aptos node")?
             .inner()
             .chain_id;
+
+        let sequence_number = self.get_sequence_number().await?;
+
+        self.account.set_sequence_number(sequence_number);
+
+        // First create account with sequence number 0 to get the address
+
         let transaction_builder = TransactionBuilder::new(
             payload,
             std::time::SystemTime::now()
@@ -242,8 +233,8 @@ impl BridgeClient {
                 + EXPIRATION_TIMESTAMP_SECS,
             ChainId::new(chain_id),
         )
-        .sender(self.account.address())
-        .sequence_number(self.account.sequence_number());
+        .sender(self.account.address());
+
         // Sign transaction
         let signed_transaction = self
             .account
@@ -257,6 +248,15 @@ impl BridgeClient {
             .context("Failed to submit transaction to Aptos node")?;
 
         Ok(response.inner().hash.to_string())
+    }
+
+    async fn get_sequence_number(&self) -> Result<u64> {
+        let account = self
+            .rest_client
+            .get_account(self.account.address())
+            .await
+            .context("Failed to get account from Aptos node")?;
+        Ok(account.inner().sequence_number)
     }
 }
 
