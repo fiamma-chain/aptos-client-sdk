@@ -28,11 +28,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // Create Bridge client
-    let mut bridge_client =
-        BridgeClient::new(&node_url, &private_key, &bridge_contract_address).await?;
+    let mut bridge_client = BridgeClient::new(
+        &node_url,
+        &private_key,
+        &bridge_contract_address,
+        &btc_light_client,
+    )
+    .await?;
 
     // Create query client
-    let query_client = QueryClient::new(&node_url, &bridge_contract_address)?;
+    let query_client = QueryClient::new(&node_url)?;
 
     // Query and print bridge configuration
     println!("\n📋 Querying bridge configuration...");

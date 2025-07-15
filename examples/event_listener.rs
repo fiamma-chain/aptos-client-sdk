@@ -4,7 +4,6 @@
 
 use aptos_bridge_sdk::{
     types::{BridgeError, BridgeResult, BurnEvent, MintEvent},
-    utils::{format_btc_amount, timestamp_to_string},
     EventHandler, EventMonitor,
 };
 use async_trait::async_trait;
@@ -83,95 +82,41 @@ impl CustomEventHandler {
 
 #[async_trait]
 impl EventHandler for CustomEventHandler {
-    async fn handle_mint(&self, event: MintEvent) -> BridgeResult<()> {
+    async fn handle_mint(
+        &self,
+        mint_version: u64,
+        mint_sequence_number: u64,
+        event: MintEvent,
+    ) -> BridgeResult<()> {
         let mut count = self.event_count.lock().await;
         *count += 1;
 
         let event_data = format!(
             "Mint Event #{} - To: {}, Amount: {}, Block: {}, TxHash: {}, Timestamp: {}",
-            *count,
-            event.to,
-            format_btc_amount(event.amount),
-            event.block_num,
-            event.transaction_hash,
-            timestamp_to_string(event.block_timestamp)
+            *count, event.to, event.amount, event.block_num, mint_version, mint_sequence_number,
         );
 
         println!("🟢 {}", event_data);
-
-        // Save to file if enabled
-        self.save_event_to_file(&event_data).await?;
-
-        // Send notification
-        self.send_notification(
-            "MINT",
-            &format!("Minted {} to {}", format_btc_amount(event.amount), event.to),
-        )
-        .await?;
-
-        // Additional processing based on event data
-        if event.amount >= 100_000_000 {
-            println!(
-                "🚨 Large mint detected: {}",
-                format_btc_amount(event.amount)
-            );
-        }
-
-        Ok(())
     }
 
-    async fn handle_burn(&self, event: BurnEvent) -> BridgeResult<()> {
-        let mut count = self.event_count.lock().await;
-        *count += 1;
-
+    async fn handle_burn(
+        &self,
+        burn_version: u64,
+        burn_sequence_number: u64,
+        event: BurnEvent,
+    ) -> BridgeResult<()> {
         let event_data = format!(
-            "Burn Event #{} - From: {}, To: {}, Amount: {}, FeeRate: {}, Operator: {}, TxHash: {}, Timestamp: {}",
-            *count,
+            "Burn Event - From: {}, To: {}, Amount: {}, FeeRate: {}, Operator: {}, TxHash: {}, Timestamp: {}",
             event.from,
             event.btc_address,
-            format_btc_amount(event.amount),
+            event.amount,
             event.fee_rate,
             event.operator_id,
-            event.transaction_hash,
-            timestamp_to_string(event.block_timestamp)
+            burn_version,
+            burn_sequence_number,
         );
 
         println!("🔴 {}", event_data);
-
-        // Save to file if enabled
-        self.save_event_to_file(&event_data).await?;
-
-        // Send notification
-        self.send_notification(
-            "BURN",
-            &format!(
-                "Burned {} from {} to {}",
-                format_btc_amount(event.amount),
-                event.from,
-                event.btc_address
-            ),
-        )
-        .await?;
-
-        // Additional processing based on event data
-        if event.fee_rate > 1000 {
-            println!("⚠️  High fee rate detected: {}", event.fee_rate);
-        }
-
-        Ok(())
-    }
-
-    async fn handle_error(&self, error: BridgeError) -> BridgeResult<()> {
-        let error_message = format!("Event processing error: {}", error);
-        eprintln!("❌ {}", error_message);
-
-        // Save error to file if enabled
-        self.save_event_to_file(&error_message).await?;
-
-        // Send error notification
-        self.send_notification("ERROR", &error_message).await?;
-
-        Ok(())
     }
 }
 
@@ -186,10 +131,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .expect("BRIDGE_CONTRACT_ADDRESS environment variable is required");
     let output_file = env::var("OUTPUT_FILE").ok();
     let save_to_file = output_file.is_some();
-    let start_version = env::var("START_VERSION")
-        .unwrap_or_else(|_| "0".to_string())
-        .parse::<u64>()
-        .unwrap_or(0);
+    let start_version = 0;
     let batch_size = env::var("BATCH_SIZE")
         .unwrap_or_else(|_| "10".to_string())
         .parse::<u16>()
@@ -215,14 +157,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create event monitor
     let mut monitor = EventMonitor::new(
-        &node_url,
+        Client::new(
+            Url::parse(node_url)
+                .map_err(|e| BridgeError::Other(format!("Invalid node URL: {}", e)))?,
+        ),
         &bridge_contract_address,
         Box::new(handler),
         start_version,
-        batch_size,
-        poll_interval,
-    )
-    .await?;
+        start_version,
+    )?;
 
     println!("✅ Event monitor created");
     println!("🔄 Starting event monitoring...");
@@ -235,7 +178,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Start monitoring in a separate task
     let stats_clone = stats.clone();
     let monitor_task = tokio::spawn(async move {
-        match monitor.start_monitoring().await {
+        match monitor.process().await {
             Ok(_) => println!("✅ Event monitoring completed"),
             Err(e) => eprintln!("❌ Event monitoring failed: {}", e),
         }
@@ -310,44 +253,4 @@ impl EventStatistics {
         self.burn_events += 1;
         self.total_burn_amount += amount;
     }
-
-    fn print_statistics(&self) {
-        let runtime = self.start_time.elapsed();
-        let hours = runtime.as_secs() / 3600;
-        let minutes = (runtime.as_secs() % 3600) / 60;
-        let seconds = runtime.as_secs() % 60;
-
-        println!(
-            "📊 Event Statistics ({}h {}m {}s):",
-            hours, minutes, seconds
-        );
-        println!("  Total Events: {}", self.total_events);
-        println!(
-            "  Mint Events: {} ({})",
-            self.mint_events,
-            format_btc_amount(self.total_mint_amount)
-        );
-        println!(
-            "  Burn Events: {} ({})",
-            self.burn_events,
-            format_btc_amount(self.total_burn_amount)
-        );
-        println!();
-    }
-}
-
-fn print_usage() {
-    println!("📖 Usage:");
-    println!("Set the following environment variables:");
-    println!("  APTOS_NODE_URL=https://fullnode.devnet.aptoslabs.com/v1");
-    println!("  BRIDGE_CONTRACT_ADDRESS=contract_address_here");
-    println!("  OUTPUT_FILE=events.log (optional)");
-    println!("  START_VERSION=0 (optional)");
-    println!("  BATCH_SIZE=10 (optional)");
-    println!("  POLL_INTERVAL=5 (optional)");
-    println!("\nExample:");
-    println!("  export BRIDGE_CONTRACT_ADDRESS=0x123...");
-    println!("  export OUTPUT_FILE=bridge_events.log");
-    println!("  export START_VERSION=1000");
-    println!("  cargo run --example event_listener");
 }

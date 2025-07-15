@@ -19,7 +19,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // Create query client
-    let query_client = QueryClient::new(&node_url, &bridge_contract_address)?;
+    let query_client = QueryClient::new(&node_url)?;
 
     println!("✅ Query client created");
     println!(

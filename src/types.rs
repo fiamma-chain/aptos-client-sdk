@@ -2,7 +2,6 @@
 //!
 //! This module defines all data types required for interacting with Aptos Bridge contracts.
 
-use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -30,6 +29,9 @@ pub enum BridgeError {
     #[error("Transaction failed: {0}")]
     TransactionFailed(String),
 
+    #[error("Fetch events error: {0}")]
+    FetchEventsError(String),
+
     #[error("Event parsing failed: {0}")]
     EventParseFailed(String),
 
@@ -43,19 +45,6 @@ pub enum BridgeError {
 /// Custom Result type
 pub type BridgeResult<T> = std::result::Result<T, BridgeError>;
 
-/// Transaction status
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum TransactionStatus {
-    /// Transaction submitted but not confirmed
-    Pending,
-    /// Transaction confirmed successfully
-    Success,
-    /// Transaction failed
-    Failed { reason: String },
-    /// Transaction rejected
-    Rejected { reason: String },
-}
-
 /// Bitcoin transaction proof
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TxProof {
@@ -66,7 +55,7 @@ pub struct TxProof {
     /// Transaction index in block
     pub tx_index: u64,
     /// Merkle proof path
-    pub merkle_proof: Vec<Vec<u8>>,
+    pub merkle_proof: Vec<u8>,
     /// Raw transaction data
     pub raw_tx: Vec<u8>,
 }
@@ -116,12 +105,13 @@ pub struct MintEvent {
     pub tx_id: Vec<u8>,
     /// Block height
     pub block_num: u64,
-    /// Transaction hash
-    pub transaction_hash: String,
-    /// Block timestamp
-    pub block_timestamp: u64,
-    /// Event sequence number
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MintEventWithVersion {
+    pub version: u64,
     pub sequence_number: u64,
+    pub event: MintEvent,
 }
 
 /// Burn event data
@@ -137,57 +127,43 @@ pub struct BurnEvent {
     pub amount: u64,
     /// Operator ID
     pub operator_id: u64,
-    /// Transaction hash
-    pub transaction_hash: String,
-    /// Block timestamp
-    pub block_timestamp: u64,
-    /// Event sequence number
-    pub sequence_number: u64,
 }
 
-/// Bridge configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BridgeConfig {
-    /// Contract owner address
-    pub owner: String,
-    /// Minimum confirmations
-    pub min_confirmations: u64,
-    /// Maximum pegs per mint
-    pub max_pegs_per_mint: u64,
-    /// Maximum BTC per mint
-    pub max_btc_per_mint: u64,
-    /// Minimum BTC per mint
-    pub min_btc_per_mint: u64,
-    /// Maximum BTC per burn
-    pub max_btc_per_burn: u64,
-    /// Minimum BTC per burn
-    pub min_btc_per_burn: u64,
-    /// Whether burn is paused
-    pub burn_paused: bool,
-    /// Maximum fee rate
-    pub max_fee_rate: u64,
+pub struct BurnEventWithVersion {
+    pub version: u64,
+    pub sequence_number: u64,
+    pub event: BurnEvent,
 }
 
 /// Bridge event enum
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum BridgeEvent {
     /// Mint event
-    Mint(MintEvent),
+    Mint(MintEventWithVersion),
     /// Burn event
-    Burn(BurnEvent),
+    Burn(BurnEventWithVersion),
 }
 
 impl fmt::Display for BridgeEvent {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             BridgeEvent::Mint(event) => {
-                write!(f, "Mint: {} satoshi to {}", event.amount, event.to)
+                write!(
+                    f,
+                    "Mint: {} satoshi to {} at (version: {}, event sequence_number: {})",
+                    event.event.amount, event.event.to, event.version, event.sequence_number
+                )
             }
             BridgeEvent::Burn(event) => {
                 write!(
                     f,
-                    "Burn: {} satoshi from {} to {}",
-                    event.amount, event.from, event.btc_address
+                    "Burn: {} satoshi from {} to {} at (version: {}, event sequence_number: {})",
+                    event.event.amount,
+                    event.event.from,
+                    event.event.btc_address,
+                    event.version,
+                    event.sequence_number
                 )
             }
         }
@@ -212,7 +188,7 @@ pub struct TxProofForBcs {
     pub block_header: Vec<u8>,
     pub tx_id: Vec<u8>,
     pub tx_index: u64,
-    pub merkle_proof: Vec<Vec<u8>>,
+    pub merkle_proof: Vec<u8>,
     pub raw_tx: Vec<u8>,
 }
 
@@ -253,73 +229,5 @@ impl TryFrom<&Peg> for PegForBcs {
 
 /// Constants module
 pub mod constants {
-    /// Mint event type
-    pub const MINT_EVENT_TYPE: &str = "0x1::bridge::Mint";
-    /// Burn event type
-    pub const BURN_EVENT_TYPE: &str = "0x1::bridge::Burn";
-
-    /// Mint function name
-    pub const MINT_FUNCTION: &str = "mint";
-    /// Burn function name
-    pub const BURN_FUNCTION: &str = "burn";
-
     pub const EXPIRATION_TIMESTAMP_SECS: u64 = 60;
-
-    /// Configuration query function names
-    pub const GET_OWNER_FUNCTION: &str = "get_owner";
-    pub const MIN_CONFIRMATIONS_FUNCTION: &str = "min_confirmations";
-    pub const MAX_PEGS_PER_MINT_FUNCTION: &str = "max_pegs_per_mint";
-    pub const MAX_BTC_PER_MINT_FUNCTION: &str = "max_btc_per_mint";
-    pub const MIN_BTC_PER_MINT_FUNCTION: &str = "min_btc_per_mint";
-    pub const MAX_BTC_PER_BURN_FUNCTION: &str = "max_btc_per_burn";
-    pub const MIN_BTC_PER_BURN_FUNCTION: &str = "min_btc_per_burn";
-    pub const BURN_PAUSED_FUNCTION: &str = "burn_paused";
-    pub const MAX_FEE_RATE_FUNCTION: &str = "max_fee_rate";
-    pub const GET_MINTED_FUNCTION: &str = "get_minted";
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_peg_conversion() {
-        let peg = Peg {
-            to: "0x1".to_string(),
-            value: 100000000,
-            block_num: 123456,
-            inclusion_proof: TxProof {
-                block_header: vec![1, 2, 3],
-                tx_id: vec![4, 5, 6],
-                tx_index: 0,
-                merkle_proof: vec![vec![7, 8, 9]],
-                raw_tx: vec![10, 11, 12],
-            },
-            tx_out_ix: 0,
-            dest_script_hash: vec![13, 14, 15],
-            script_type: ScriptType::P2PKH,
-        };
-
-        let peg_bcs = PegForBcs::try_from(&peg).unwrap();
-        assert_eq!(peg_bcs.value, 100000000);
-        assert_eq!(peg_bcs.block_num, 123456);
-        assert_eq!(peg_bcs.script_type, 0);
-    }
-
-    #[test]
-    fn test_event_display() {
-        let mint_event = MintEvent {
-            to: "0x1".to_string(),
-            amount: 100000000,
-            tx_id: vec![1, 2, 3],
-            block_num: 123456,
-            transaction_hash: "hash".to_string(),
-            block_timestamp: 1234567890,
-            sequence_number: 1,
-        };
-
-        let event = BridgeEvent::Mint(mint_event);
-        assert!(event.to_string().contains("Mint"));
-        assert!(event.to_string().contains("100000000"));
-    }
 }

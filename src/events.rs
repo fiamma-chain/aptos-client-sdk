@@ -2,205 +2,178 @@
 //!
 //! Provides functionality to listen to Aptos Bridge contract events.
 
-use crate::types::{constants::*, BridgeError, BridgeEvent, BridgeResult, BurnEvent, MintEvent};
+use crate::types::{BridgeError, BridgeResult, BurnEvent, MintEvent};
 use crate::utils::parse_account_address;
+use crate::{BurnEventWithVersion, MintEventWithVersion};
 
-use aptos_sdk::{
-    rest_client::Client,
-    types::{account_address::AccountAddress, transaction::Version},
-};
+use aptos_sdk::{rest_client::Client, types::account_address::AccountAddress};
 use async_trait::async_trait;
-use serde_json::Value;
-use std::collections::HashMap;
 use url::Url;
 
 /// Event handler trait
 #[async_trait]
 pub trait EventHandler: Send + Sync {
     /// Handle Mint event
-    async fn handle_mint(&self, event: MintEvent) -> BridgeResult<()>;
+    async fn handle_mint(
+        &self,
+        mint_version: u64,
+        mint_sequence_number: u64,
+        event: MintEvent,
+    ) -> BridgeResult<()>;
 
     /// Handle Burn event
-    async fn handle_burn(&self, event: BurnEvent) -> BridgeResult<()>;
-
-    /// Handle error event
-    async fn handle_error(&self, error: BridgeError) -> BridgeResult<()> {
-        eprintln!("Event processing error: {}", error);
-        Ok(())
-    }
+    async fn handle_burn(
+        &self,
+        burn_version: u64,
+        burn_sequence_number: u64,
+        event: BurnEvent,
+    ) -> BridgeResult<()>;
 }
 
 /// Event monitor
 pub struct EventMonitor {
-    /// REST client
     rest_client: Client,
-    /// Bridge contract address
     contract_address: AccountAddress,
-    /// Event handler
     handler: Box<dyn EventHandler>,
-    /// Last processed version
-    last_processed_version: Version,
-    /// Batch size
-    batch_size: u16,
-    /// Confirmed blocks
-    confirmed_blocks: u64,
-    /// Poll interval
-    poll_interval: std::time::Duration,
+    mint_start: u64,
+    burn_start: u64,
 }
 
 impl EventMonitor {
     /// Create new event monitor
-    pub async fn new(
+    pub fn new(
         node_url: &str,
         contract_address: &str,
         handler: Box<dyn EventHandler>,
-        start_version: u64,
-        batch_size: u16,
-        poll_interval_secs: u64,
+        mint_start: u64,
+        burn_start: u64,
     ) -> BridgeResult<Self> {
+        let contract_address = parse_account_address(contract_address)?;
+
         let rest_client = Client::new(
             Url::parse(node_url)
-                .map_err(|e| BridgeError::Config(format!("Invalid node URL: {}", e)))?,
+                .map_err(|e| BridgeError::Other(format!("Invalid node URL: {}", e)))?,
         );
-
-        let contract_address = parse_account_address(contract_address)?;
 
         Ok(Self {
             rest_client,
             contract_address,
             handler,
-            last_processed_version: start_version,
-            batch_size,
-            confirmed_blocks: 6,
-            poll_interval: std::time::Duration::from_secs(poll_interval_secs),
+            mint_start,
+            burn_start,
         })
     }
 
-    /// Start monitoring events
-    pub async fn start_monitoring(&mut self) -> BridgeResult<()> {
-        println!(
-            "Starting event monitoring from version {}",
-            self.last_processed_version
-        );
+    /// Process events with handler
+    pub async fn process(&self) -> BridgeResult<()> {
+        self.fetch_and_process_mint_events(self.mint_start).await?;
 
-        loop {
-            match self.process_events().await {
-                Ok(_) => {
-                    tokio::time::sleep(self.poll_interval).await;
-                }
-                Err(e) => {
-                    eprintln!("Error processing events: {}", e);
-                    self.handler.handle_error(e).await?;
-                    tokio::time::sleep(self.poll_interval).await;
-                }
-            }
-        }
-    }
+        self.fetch_and_process_burn_events(self.burn_start).await?;
 
-    /// Process a batch of events
-    async fn process_events(&mut self) -> BridgeResult<()> {
-        // Get latest version
-        let latest_version = self.get_latest_version().await?;
-
-        if self.last_processed_version >= latest_version {
-            return Ok(());
-        }
-
-        // Process events in batches
-        let end_version = std::cmp::min(
-            self.last_processed_version + self.batch_size as u64,
-            latest_version,
-        );
-
-        let events = self
-            .fetch_events(self.last_processed_version, end_version)
-            .await?;
-
-        for event in events {
-            match event {
-                BridgeEvent::Mint(mint_event) => {
-                    self.handler.handle_mint(mint_event).await?;
-                }
-                BridgeEvent::Burn(burn_event) => {
-                    self.handler.handle_burn(burn_event).await?;
-                }
-            }
-        }
-
-        self.last_processed_version = end_version;
         Ok(())
     }
 
-    /// Get latest version from the network
-    async fn get_latest_version(&self) -> BridgeResult<u64> {
-        let ledger_info = self
-            .rest_client
-            .get_ledger_information()
-            .await
-            .map_err(|e| BridgeError::Aptos(e.to_string()))?;
+    /// Fetch mint events
+    async fn fetch_and_process_mint_events(&self, start: u64) -> BridgeResult<()> {
+        let mint_events = self.fetch_mint_events(start).await?;
 
-        Ok(ledger_info.inner().version)
+        for event in mint_events {
+            self.handler
+                .handle_mint(event.version, event.sequence_number, event.event)
+                .await?;
+        }
+
+        Ok(())
     }
 
-    /// Fetch events from the network
-    async fn fetch_events(
-        &self,
-        start_version: u64,
-        end_version: u64,
-    ) -> BridgeResult<Vec<BridgeEvent>> {
+    /// Fetch mint events
+    async fn fetch_mint_events(&self, start: u64) -> BridgeResult<Vec<MintEventWithVersion>> {
+        // For #[event] structs, the struct_tag is the full event type path
+        let struct_tag = format!("{}::bridge::Mint", self.contract_address.to_hex_literal());
+        let field_name = "events";
+        let response = self
+            .rest_client
+            .get_account_events(
+                self.contract_address,
+                &struct_tag,
+                field_name,
+                Some(start),
+                None,
+            )
+            .await
+            .map_err(|e| BridgeError::FetchEventsError(e.to_string()))?;
+
         let mut events = Vec::new();
+        for event in response.into_inner() {
+            match self.parse_mint_event(&event.data) {
+                Ok(mint_event) => events.push(MintEventWithVersion {
+                    version: event.version.into(),
+                    sequence_number: event.sequence_number.into(),
+                    event: mint_event,
+                }),
+                Err(e) => eprintln!("Failed to parse mint event: {}", e),
+            }
+        }
 
-        // This is a simplified implementation
-        // In a real implementation, you would need to:
-        // 1. Query transactions in the version range
-        // 2. Filter for events from the bridge contract
-        // 3. Parse the event data
-        // 4. Convert to BridgeEvent instances
-
-        // For now, return empty vector
         Ok(events)
     }
-}
 
-/// Default event handler implementation
-pub struct DefaultEventHandler;
+    /// Fetch and process burn events
+    async fn fetch_and_process_burn_events(&self, start: u64) -> BridgeResult<()> {
+        let burn_events = self.fetch_burn_events(start).await?;
 
-impl DefaultEventHandler {
-    pub fn new() -> Self {
-        Self
-    }
-}
+        for event in burn_events {
+            self.handler
+                .handle_burn(event.version, event.sequence_number, event.event)
+                .await?;
+        }
 
-#[async_trait]
-impl EventHandler for DefaultEventHandler {
-    async fn handle_mint(&self, event: MintEvent) -> BridgeResult<()> {
-        println!(
-            "🟢 Mint Event: {} to {}",
-            crate::utils::format_btc_amount(event.amount),
-            event.to
-        );
         Ok(())
     }
 
-    async fn handle_burn(&self, event: BurnEvent) -> BridgeResult<()> {
-        println!(
-            "🔴 Burn Event: {} from {} to {}",
-            crate::utils::format_btc_amount(event.amount),
-            event.from,
-            event.btc_address
-        );
-        Ok(())
+    /// Fetch burn events
+    async fn fetch_burn_events(&self, start: u64) -> BridgeResult<Vec<BurnEventWithVersion>> {
+        let struct_tag = format!("{}::bridge::Burn", self.contract_address.to_hex_literal());
+        let field_name = "events";
+
+        let response = self
+            .rest_client
+            .get_account_events(
+                self.contract_address,
+                &struct_tag,
+                field_name,
+                Some(start),
+                None,
+            )
+            .await
+            .map_err(|e| BridgeError::FetchEventsError(e.to_string()))?;
+
+        let mut events = Vec::new();
+        for event in response.into_inner() {
+            match self.parse_burn_event(&event.data) {
+                Ok(burn_event) => events.push(BurnEventWithVersion {
+                    version: event.version.into(),
+                    sequence_number: event.sequence_number.into(),
+                    event: burn_event,
+                }),
+                Err(e) => eprintln!("Failed to parse burn event: {}", e),
+            }
+        }
+
+        Ok(events)
     }
-}
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::types::ScriptType;
+    /// Parse mint event using serde_json
+    fn parse_mint_event(&self, data: &serde_json::Value) -> BridgeResult<MintEvent> {
+        serde_json::from_value(data.clone()).map_err(|e| {
+            BridgeError::EventParseFailed(format!("Failed to parse mint event: {}", e))
+        })
+    }
 
-    #[test]
-    fn test_default_event_handler() {
-        let handler = DefaultEventHandler::new();
-        // Add tests for event handler
+    /// Parse burn event using serde_json
+    fn parse_burn_event(&self, data: &serde_json::Value) -> BridgeResult<BurnEvent> {
+        serde_json::from_value(data.clone()).map_err(|e| {
+            BridgeError::EventParseFailed(format!("Failed to parse burn event: {}", e))
+        })
     }
 }
