@@ -8,4 +8,12 @@ pub mod utils;
 pub use bridge_client::BridgeClient;
 pub use events::{EventHandler, EventMonitor};
 pub use query_client::QueryClient;
-pub use types::*;
+
+// Re-export main data types (excluding error types)
+pub use types::{
+    BridgeEvent, BurnEvent, BurnEventWithVersion, MintEvent, MintEventWithVersion, Peg, PegForBcs,
+    ScriptType, TxProof, TxProofForBcs,
+};
+
+// Re-export anyhow::Result for convenience
+pub use anyhow::Result;

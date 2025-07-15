@@ -2,48 +2,9 @@
 //!
 //! This module defines all data types required for interacting with Aptos Bridge contracts.
 
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::fmt;
-
-/// Custom error type
-#[derive(Debug, thiserror::Error)]
-pub enum BridgeError {
-    #[error("Network error: {0}")]
-    Network(#[from] reqwest::Error),
-
-    #[error("JSON parsing error: {0}")]
-    Json(#[from] serde_json::Error),
-
-    #[error("BCS serialization error: {0}")]
-    Bcs(#[from] bcs::Error),
-
-    #[error("Aptos SDK error: {0}")]
-    Aptos(String),
-
-    #[error("Invalid private key format")]
-    InvalidPrivateKey,
-
-    #[error("Invalid address format: {0}")]
-    InvalidAddress(String),
-
-    #[error("Transaction failed: {0}")]
-    TransactionFailed(String),
-
-    #[error("Fetch events error: {0}")]
-    FetchEventsError(String),
-
-    #[error("Event parsing failed: {0}")]
-    EventParseFailed(String),
-
-    #[error("Configuration error: {0}")]
-    Config(String),
-
-    #[error("Other error: {0}")]
-    Other(String),
-}
-
-/// Custom Result type
-pub type BridgeResult<T> = std::result::Result<T, BridgeError>;
 
 /// Bitcoin transaction proof
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -193,11 +154,11 @@ pub struct TxProofForBcs {
 }
 
 impl TryFrom<&Peg> for PegForBcs {
-    type Error = BridgeError;
+    type Error = anyhow::Error;
 
-    fn try_from(peg: &Peg) -> BridgeResult<Self> {
+    fn try_from(peg: &Peg) -> Result<Self> {
         let to = aptos_sdk::types::account_address::AccountAddress::from_str_strict(&peg.to)
-            .map_err(|_| BridgeError::InvalidAddress(peg.to.clone()))?;
+            .with_context(|| format!("Invalid address format: {}", peg.to))?;
 
         let inclusion_proof = TxProofForBcs {
             block_header: peg.inclusion_proof.block_header.clone(),

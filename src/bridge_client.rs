@@ -2,10 +2,11 @@
 //!
 //! Provides core functionality for interacting with Aptos Bridge contracts.
 
-use crate::types::{constants::*, BridgeError, BridgeResult, Peg, PegForBcs};
+use crate::types::{constants::*, Peg, PegForBcs};
 use crate::utils::{parse_account_address, validate_btc_address};
 use crate::QueryClient;
 
+use anyhow::{bail, Context, Result};
 use aptos_sdk::move_types::identifier::Identifier;
 use aptos_sdk::move_types::language_storage::ModuleId;
 use aptos_sdk::rest_client::aptos_api_types::{EntryFunctionId, IdentifierWrapper, MoveModuleId};
@@ -43,7 +44,7 @@ impl BridgeClient {
         private_key_hex: &str,
         bridge_contract_address: &str,
         btc_light_client: &str,
-    ) -> BridgeResult<Self> {
+    ) -> Result<Self> {
         // Parse contract address
         let bridge_contract_address = parse_account_address(bridge_contract_address)?;
 
@@ -52,7 +53,7 @@ impl BridgeClient {
         // Create REST client
         let rest_client = Client::new(
             Url::parse(node_url)
-                .map_err(|e| BridgeError::Config(format!("Invalid Aptos node URL: {}", e)))?,
+                .with_context(|| format!("Invalid Aptos node URL: {}", node_url))?,
         );
 
         // Create query client
@@ -66,12 +67,12 @@ impl BridgeClient {
         };
 
         let private_key = Ed25519PrivateKey::try_from(private_key_str.as_bytes())
-            .map_err(|_| BridgeError::InvalidPrivateKey)?;
+            .context("Invalid private key format")?;
 
         // Create local account
         let account = LocalAccount::new(
             AccountAddress::from_str_strict(private_key_str)
-                .map_err(|_| BridgeError::InvalidPrivateKey)?,
+                .context("Invalid private key format")?,
             private_key,
             0,
         );
@@ -86,9 +87,9 @@ impl BridgeClient {
     }
 
     /// Mint tokens
-    pub async fn mint(&mut self, pegs: Vec<Peg>) -> BridgeResult<String> {
+    pub async fn mint(&mut self, pegs: Vec<Peg>) -> Result<String> {
         if pegs.is_empty() {
-            return Err(BridgeError::Other("Pegs cannot be empty".to_string()));
+            bail!("Pegs cannot be empty");
         }
 
         // Convert to BCS-serializable format
@@ -98,7 +99,7 @@ impl BridgeClient {
             .collect::<Result<Vec<_>, _>>()?;
 
         // Serialize parameters
-        let args = vec![bcs::to_bytes(&pegs_for_bcs).map_err(|e| BridgeError::Bcs(e))?];
+        let args = vec![bcs::to_bytes(&pegs_for_bcs).context("Failed to serialize pegs for BCS")?];
 
         // Create Entry Function
         let entry_function = EntryFunction::new(
@@ -126,21 +127,21 @@ impl BridgeClient {
         fee_rate: u64,
         amount: u64,
         operator_id: u64,
-    ) -> BridgeResult<String> {
+    ) -> Result<String> {
         // Validate BTC address format
         validate_btc_address(&btc_address)?;
 
         // Validate amount
         if amount == 0 {
-            return Err(BridgeError::Other("Amount cannot be zero".to_string()));
+            bail!("Amount cannot be zero");
         }
 
         // Serialize parameters
         let args = vec![
-            bcs::to_bytes(&btc_address).map_err(|e| BridgeError::Bcs(e))?,
-            bcs::to_bytes(&fee_rate).map_err(|e| BridgeError::Bcs(e))?,
-            bcs::to_bytes(&amount).map_err(|e| BridgeError::Bcs(e))?,
-            bcs::to_bytes(&operator_id).map_err(|e| BridgeError::Bcs(e))?,
+            bcs::to_bytes(&btc_address).context("Failed to serialize BTC address")?,
+            bcs::to_bytes(&fee_rate).context("Failed to serialize fee rate")?,
+            bcs::to_bytes(&amount).context("Failed to serialize amount")?,
+            bcs::to_bytes(&operator_id).context("Failed to serialize operator ID")?,
         ];
 
         // Create Entry Function
@@ -163,7 +164,7 @@ impl BridgeClient {
     }
 
     /// Get minimum confirmations required for BTC transactions
-    pub async fn get_min_confirmations(&self) -> BridgeResult<u64> {
+    pub async fn get_min_confirmations(&self) -> Result<u64> {
         // Construct the view function call
         let view_request = ViewRequest {
             function: EntryFunctionId {
@@ -182,23 +183,23 @@ impl BridgeClient {
             .rest_client
             .view(&view_request, None)
             .await
-            .map_err(|e| BridgeError::Aptos(e.to_string()))?;
+            .context("Failed to call get_min_confirmations view function")?;
 
         // Parse the response
         let result = response
             .inner()
             .get(0)
-            .ok_or_else(|| BridgeError::Other("No response from view function".to_string()))?;
+            .context("No response from view function")?;
 
         // Deserialize the u64 result
-        let min_confirmations: u64 = serde_json::from_value(result.clone())
-            .map_err(|e| BridgeError::Other(format!("Failed to parse min_confirmations: {}", e)))?;
+        let min_confirmations: u64 =
+            serde_json::from_value(result.clone()).context("Failed to parse min_confirmations")?;
 
         Ok(min_confirmations)
     }
 
-    /// Get latest block height
-    pub async fn get_latest_block_height(&self) -> BridgeResult<u64> {
+    /// Get latest block height from BTC light client
+    pub async fn get_latest_block_height(&self) -> Result<u64> {
         // Construct the view function call
         let view_request = ViewRequest {
             function: EntryFunctionId {
@@ -217,29 +218,28 @@ impl BridgeClient {
             .rest_client
             .view(&view_request, None)
             .await
-            .map_err(|e| BridgeError::Aptos(e.to_string()))?;
+            .context("Failed to call get_latest_block_height view function")?;
 
         // Parse the response
         let result = response
             .inner()
             .get(0)
-            .ok_or_else(|| BridgeError::Other("No response from view function".to_string()))?;
+            .context("No response from view function")?;
 
         // Deserialize the u64 result
-        let latest_block_height: u64 = serde_json::from_value(result.clone()).map_err(|e| {
-            BridgeError::Other(format!("Failed to parse latest_block_height: {}", e))
-        })?;
+        let latest_block_height: u64 = serde_json::from_value(result.clone())
+            .context("Failed to parse latest_block_height")?;
 
         Ok(latest_block_height)
     }
 
     /// Generic method for executing transactions
-    async fn execute_transaction(&mut self, payload: TransactionPayload) -> BridgeResult<String> {
+    async fn execute_transaction(&mut self, payload: TransactionPayload) -> Result<String> {
         let chain_id = self
             .rest_client
             .get_index()
             .await
-            .map_err(|e| BridgeError::Aptos(e.to_string()))?
+            .context("Failed to get chain ID from Aptos node")?
             .inner()
             .chain_id;
         let transaction_builder = TransactionBuilder::new(
@@ -263,7 +263,7 @@ impl BridgeClient {
             .rest_client
             .submit(&signed_transaction)
             .await
-            .map_err(|e| BridgeError::Aptos(e.to_string()))?;
+            .context("Failed to submit transaction to Aptos node")?;
 
         Ok(response.inner().hash.to_string())
     }

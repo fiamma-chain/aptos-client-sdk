@@ -2,10 +2,11 @@
 //!
 //! Provides functionality to listen to Aptos Bridge contract events.
 
-use crate::types::{BridgeError, BridgeResult, BurnEvent, MintEvent};
+use crate::types::{BurnEvent, MintEvent};
 use crate::utils::parse_account_address;
 use crate::{BurnEventWithVersion, MintEventWithVersion};
 
+use anyhow::{Context, Result};
 use aptos_sdk::{rest_client::Client, types::account_address::AccountAddress};
 use async_trait::async_trait;
 use url::Url;
@@ -19,7 +20,7 @@ pub trait EventHandler: Send + Sync {
         mint_version: u64,
         mint_sequence_number: u64,
         event: MintEvent,
-    ) -> BridgeResult<()>;
+    ) -> Result<()>;
 
     /// Handle Burn event
     async fn handle_burn(
@@ -27,7 +28,7 @@ pub trait EventHandler: Send + Sync {
         burn_version: u64,
         burn_sequence_number: u64,
         event: BurnEvent,
-    ) -> BridgeResult<()>;
+    ) -> Result<()>;
 }
 
 /// Event monitor
@@ -47,12 +48,11 @@ impl EventMonitor {
         handler: Box<dyn EventHandler>,
         mint_start: u64,
         burn_start: u64,
-    ) -> BridgeResult<Self> {
+    ) -> Result<Self> {
         let contract_address = parse_account_address(contract_address)?;
 
         let rest_client = Client::new(
-            Url::parse(node_url)
-                .map_err(|e| BridgeError::Other(format!("Invalid node URL: {}", e)))?,
+            Url::parse(node_url).with_context(|| format!("Invalid node URL: {}", node_url))?,
         );
 
         Ok(Self {
@@ -65,7 +65,7 @@ impl EventMonitor {
     }
 
     /// Process events with handler
-    pub async fn process(&self) -> BridgeResult<()> {
+    pub async fn process(&self) -> Result<()> {
         self.fetch_and_process_mint_events(self.mint_start).await?;
 
         self.fetch_and_process_burn_events(self.burn_start).await?;
@@ -74,7 +74,7 @@ impl EventMonitor {
     }
 
     /// Fetch mint events
-    async fn fetch_and_process_mint_events(&self, start: u64) -> BridgeResult<()> {
+    async fn fetch_and_process_mint_events(&self, start: u64) -> Result<()> {
         let mint_events = self.fetch_mint_events(start).await?;
 
         for event in mint_events {
@@ -87,7 +87,7 @@ impl EventMonitor {
     }
 
     /// Fetch mint events
-    async fn fetch_mint_events(&self, start: u64) -> BridgeResult<Vec<MintEventWithVersion>> {
+    async fn fetch_mint_events(&self, start: u64) -> Result<Vec<MintEventWithVersion>> {
         // For #[event] structs, the struct_tag is the full event type path
         let struct_tag = format!("{}::bridge::Mint", self.contract_address.to_hex_literal());
         let field_name = "events";
@@ -101,7 +101,7 @@ impl EventMonitor {
                 None,
             )
             .await
-            .map_err(|e| BridgeError::FetchEventsError(e.to_string()))?;
+            .context("Failed to fetch mint events from Aptos node")?;
 
         let mut events = Vec::new();
         for event in response.into_inner() {
@@ -119,7 +119,7 @@ impl EventMonitor {
     }
 
     /// Fetch and process burn events
-    async fn fetch_and_process_burn_events(&self, start: u64) -> BridgeResult<()> {
+    async fn fetch_and_process_burn_events(&self, start: u64) -> Result<()> {
         let burn_events = self.fetch_burn_events(start).await?;
 
         for event in burn_events {
@@ -132,7 +132,7 @@ impl EventMonitor {
     }
 
     /// Fetch burn events
-    async fn fetch_burn_events(&self, start: u64) -> BridgeResult<Vec<BurnEventWithVersion>> {
+    async fn fetch_burn_events(&self, start: u64) -> Result<Vec<BurnEventWithVersion>> {
         let struct_tag = format!("{}::bridge::Burn", self.contract_address.to_hex_literal());
         let field_name = "events";
 
@@ -146,7 +146,7 @@ impl EventMonitor {
                 None,
             )
             .await
-            .map_err(|e| BridgeError::FetchEventsError(e.to_string()))?;
+            .context("Failed to fetch burn events from Aptos node")?;
 
         let mut events = Vec::new();
         for event in response.into_inner() {
@@ -164,16 +164,12 @@ impl EventMonitor {
     }
 
     /// Parse mint event using serde_json
-    fn parse_mint_event(&self, data: &serde_json::Value) -> BridgeResult<MintEvent> {
-        serde_json::from_value(data.clone()).map_err(|e| {
-            BridgeError::EventParseFailed(format!("Failed to parse mint event: {}", e))
-        })
+    fn parse_mint_event(&self, data: &serde_json::Value) -> Result<MintEvent> {
+        serde_json::from_value(data.clone()).context("Failed to parse mint event data")
     }
 
     /// Parse burn event using serde_json
-    fn parse_burn_event(&self, data: &serde_json::Value) -> BridgeResult<BurnEvent> {
-        serde_json::from_value(data.clone()).map_err(|e| {
-            BridgeError::EventParseFailed(format!("Failed to parse burn event: {}", e))
-        })
+    fn parse_burn_event(&self, data: &serde_json::Value) -> Result<BurnEvent> {
+        serde_json::from_value(data.clone()).context("Failed to parse burn event data")
     }
 }

@@ -2,8 +2,9 @@
 //!
 //! This example shows how to use the Aptos Bridge SDK to listen to bridge events.
 
+use anyhow::{Context, Result};
 use aptos_bridge_sdk::{
-    types::{BridgeError, BridgeResult, BurnEvent, MintEvent},
+    types::{BurnEvent, MintEvent},
     EventHandler, EventMonitor,
 };
 use async_trait::async_trait;
@@ -36,7 +37,7 @@ impl CustomEventHandler {
     }
 
     /// Save event to file
-    async fn save_event_to_file(&self, event_data: &str) -> BridgeResult<()> {
+    async fn save_event_to_file(&self, event_data: &str) -> Result<()> {
         if !self.save_to_file {
             return Ok(());
         }
@@ -50,7 +51,7 @@ impl CustomEventHandler {
                 .append(true)
                 .open(file_path)
                 .await
-                .map_err(|e| BridgeError::Other(format!("Failed to open file: {}", e)))?;
+                .with_context(|| format!("Failed to open file: {}", file_path))?;
 
             let timestamp = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -61,18 +62,16 @@ impl CustomEventHandler {
 
             file.write_all(log_entry.as_bytes())
                 .await
-                .map_err(|e| BridgeError::Other(format!("Failed to write to file: {}", e)))?;
+                .context("Failed to write to file")?;
 
-            file.flush()
-                .await
-                .map_err(|e| BridgeError::Other(format!("Failed to flush file: {}", e)))?;
+            file.flush().await.context("Failed to flush file")?;
         }
 
         Ok(())
     }
 
     /// Send notification (placeholder for actual notification system)
-    async fn send_notification(&self, event_type: &str, message: &str) -> BridgeResult<()> {
+    async fn send_notification(&self, event_type: &str, message: &str) -> Result<()> {
         // This is a placeholder for actual notification implementation
         // You can implement webhook calls, email sending, etc.
         println!("🔔 Notification [{}]: {}", event_type, message);
@@ -87,7 +86,7 @@ impl EventHandler for CustomEventHandler {
         mint_version: u64,
         mint_sequence_number: u64,
         event: MintEvent,
-    ) -> BridgeResult<()> {
+    ) -> Result<()> {
         let mut count = self.event_count.lock().await;
         *count += 1;
 
@@ -97,6 +96,14 @@ impl EventHandler for CustomEventHandler {
         );
 
         println!("🟢 {}", event_data);
+
+        // Save to file if enabled
+        self.save_event_to_file(&event_data).await?;
+
+        // Send notification
+        self.send_notification("MINT", &event_data).await?;
+
+        Ok(())
     }
 
     async fn handle_burn(
@@ -104,7 +111,7 @@ impl EventHandler for CustomEventHandler {
         burn_version: u64,
         burn_sequence_number: u64,
         event: BurnEvent,
-    ) -> BridgeResult<()> {
+    ) -> Result<()> {
         let event_data = format!(
             "Burn Event - From: {}, To: {}, Amount: {}, FeeRate: {}, Operator: {}, TxHash: {}, Timestamp: {}",
             event.from,
@@ -117,11 +124,19 @@ impl EventHandler for CustomEventHandler {
         );
 
         println!("🔴 {}", event_data);
+
+        // Save to file if enabled
+        self.save_event_to_file(&event_data).await?;
+
+        // Send notification
+        self.send_notification("BURN", &event_data).await?;
+
+        Ok(())
     }
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<()> {
     println!("👂 Aptos Bridge Event Listener Example");
 
     // Get configuration from environment variables
@@ -132,7 +147,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let output_file = env::var("OUTPUT_FILE").ok();
     let save_to_file = output_file.is_some();
     let start_version = 0;
-    let batch_size = env::var("BATCH_SIZE")
+    let _batch_size = env::var("BATCH_SIZE")
         .unwrap_or_else(|_| "10".to_string())
         .parse::<u16>()
         .unwrap_or(10);
@@ -145,7 +160,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  Node URL: {}", node_url);
     println!("  Bridge Contract: {}", bridge_contract_address);
     println!("  Start Version: {}", start_version);
-    println!("  Batch Size: {}", batch_size);
     println!("  Poll Interval: {}s", poll_interval);
     if let Some(ref file) = output_file {
         println!("  Output File: {}", file);
@@ -156,11 +170,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let handler = CustomEventHandler::new(save_to_file, output_file);
 
     // Create event monitor
-    let mut monitor = EventMonitor::new(
-        Client::new(
-            Url::parse(node_url)
-                .map_err(|e| BridgeError::Other(format!("Invalid node URL: {}", e)))?,
-        ),
+    let monitor = EventMonitor::new(
+        &node_url,
         &bridge_contract_address,
         Box::new(handler),
         start_version,
@@ -172,85 +183,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Press Ctrl+C to stop");
     println!();
 
-    // Create event statistics tracker
-    let stats = Arc::new(Mutex::new(EventStatistics::new()));
+    // Set up Ctrl+C handler for graceful shutdown
+    let monitor = Arc::new(monitor);
 
-    // Start monitoring in a separate task
-    let stats_clone = stats.clone();
-    let monitor_task = tokio::spawn(async move {
-        match monitor.process().await {
-            Ok(_) => println!("✅ Event monitoring completed"),
-            Err(e) => eprintln!("❌ Event monitoring failed: {}", e),
-        }
-    });
-
-    // Start periodic statistics reporting
-    let stats_clone2 = stats.clone();
-    let stats_task = tokio::spawn(async move {
-        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(30));
-        loop {
-            interval.tick().await;
-            let stats = stats_clone2.lock().await;
-            stats.print_statistics();
-        }
-    });
-
-    // Handle Ctrl+C gracefully
-    let shutdown_task = tokio::spawn(async move {
+    tokio::spawn(async move {
         tokio::signal::ctrl_c()
             .await
             .expect("Failed to listen for Ctrl+C");
-        println!("\n🛑 Shutdown signal received, stopping event monitoring...");
-
-        // Print final statistics
-        let stats = stats.lock().await;
-        println!("\n📊 Final Statistics:");
-        stats.print_statistics();
-
+        println!("\n👋 Received Ctrl+C, shutting down gracefully...");
         std::process::exit(0);
     });
 
-    // Wait for any of the tasks to complete
-    tokio::select! {
-        _ = monitor_task => {},
-        _ = stats_task => {},
-        _ = shutdown_task => {},
-    }
-
-    Ok(())
-}
-
-/// Event statistics tracker
-struct EventStatistics {
-    total_events: u64,
-    mint_events: u64,
-    burn_events: u64,
-    total_mint_amount: u64,
-    total_burn_amount: u64,
-    start_time: std::time::Instant,
-}
-
-impl EventStatistics {
-    fn new() -> Self {
-        Self {
-            total_events: 0,
-            mint_events: 0,
-            burn_events: 0,
-            total_mint_amount: 0,
-            total_burn_amount: 0,
-            start_time: std::time::Instant::now(),
+    // Start monitoring loop
+    loop {
+        match monitor.process().await {
+            Ok(_) => {
+                println!("📊 Processed events successfully");
+            }
+            Err(e) => {
+                eprintln!("❌ Error processing events: {}", e);
+            }
         }
-    }
 
-    fn record_mint(&mut self, amount: u64) {
-        self.total_events += 1;
-        self.mint_events += 1;
-        self.total_mint_amount += amount;
-    }
-
-    fn record_burn(&mut self, amount: u64) {
-        self.total_events += 1;
-        self.burn_events += 1;
-        self.total_burn_amount += amount;
+        // Wait before next poll
+        tokio::time::sleep(tokio::time::Duration::from_secs(poll_interval)).await;
     }
 }

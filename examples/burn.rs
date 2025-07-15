@@ -2,11 +2,12 @@
 //!
 //! This example shows how to use the Aptos Bridge SDK to burn tokens.
 
-use aptos_bridge_sdk::{utils::validate_btc_address, BridgeClient, QueryClient};
+use anyhow::Result;
+use aptos_bridge_sdk::BridgeClient;
 use std::env;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<()> {
     // Get configuration from environment variables
     let node_url = env::var("APTOS_NODE_URL")
         .unwrap_or_else(|_| "https://fullnode.devnet.aptoslabs.com/v1".to_string());
@@ -16,8 +17,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .expect("BRIDGE_CONTRACT_ADDRESS environment variable is required");
     let btc_light_client =
         env::var("BTC_LIGHT_CLIENT").expect("BTC_LIGHT_CLIENT environment variable is required");
-    let faucet_url = env::var("FAUCET_URL")
-        .unwrap_or_else(|_| "https://faucet.devnet.aptoslabs.com".to_string());
 
     // Burn operation parameters
     let btc_address = env::var("BTC_ADDRESS")
