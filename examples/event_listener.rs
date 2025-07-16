@@ -4,50 +4,44 @@
 
 use anyhow::Result;
 use aptos_bridge_sdk::{
-    types::{BurnEvent, MintEvent},
+    types::{BridgeBurnEvent, BridgeMintEvent},
     EventHandler, EventMonitor,
 };
 use async_trait::async_trait;
-use std::sync::Arc;
+use std::env;
 
 struct CustomEventHandler;
 
 #[async_trait]
 impl EventHandler for CustomEventHandler {
-    async fn handle_mint(
-        &self,
-        mint_version: u64,
-        mint_sequence_number: u64,
-        event: MintEvent,
-    ) -> Result<()> {
+    async fn handle_mint(&self, event: BridgeMintEvent) -> Result<()> {
         let event_data = format!(
-            "Mint Event To: {}, Amount: {}, Block: {}, TxHash: {}, Timestamp: {}",
-            event.to, event.amount, event.block_num, mint_version, mint_sequence_number,
+            "🟢 Mint Event - To: {}, Amount: {}, Block: {}, Version: {}, Timestamp: {}",
+            event.event.to,
+            event.event.amount,
+            event.event.block_num,
+            event.tx_version,
+            event.timestamp,
         );
 
-        println!("🟢 {}", event_data);
+        println!("{}", event_data);
 
         Ok(())
     }
 
-    async fn handle_burn(
-        &self,
-        burn_version: u64,
-        burn_sequence_number: u64,
-        event: BurnEvent,
-    ) -> Result<()> {
+    async fn handle_burn(&self, event: BridgeBurnEvent) -> Result<()> {
         let event_data = format!(
-            "Burn Event - From: {}, To: {}, Amount: {}, FeeRate: {}, Operator: {}, TxHash: {}, Timestamp: {}",
-            event.from,
-            event.btc_address,
-            event.amount,
-            event.fee_rate,
-            event.operator_id,
-            burn_version,
-            burn_sequence_number,
+            "🔴 Burn Event - From: {}, To: {}, Amount: {}, FeeRate: {}, Operator: {}, Version: {}, Timestamp: {}",
+            event.event.from,
+            event.event.btc_address,
+            event.event.amount,
+            event.event.fee_rate,
+            event.event.operator_id,
+            event.tx_version,
+            event.timestamp,
         );
 
-        println!("🔴 {}", event_data);
+        println!("{}", event_data);
 
         Ok(())
     }
@@ -58,29 +52,27 @@ async fn main() -> Result<()> {
     dotenv::dotenv().ok();
     println!("👂 Aptos Bridge Event Listener Example");
 
-    let node_url = "https://fullnode.testnet.aptoslabs.com/v1";
-    let bridge_contract_address =
-        "0x2e5df32d3db81510b01dc0ec2fd6220b43b29b1e2a98b48a013a774f10726e5b";
-    let mint_start = 0;
-    let burn_start = 0;
+    // Use your custom GraphQL index URL
+    let graphql_url =
+        "https://api.testnet.aptoslabs.com/nocode/v1/api/cmd62f87p006ks601xpbky5mx/v1/graphql";
+    let start_version = 0;
+    let poll_interval = 10; // seconds
 
-    let poll_interval = 3;
+    // Get API key from environment variable
+    let api_key =
+        env::var("GRAPHQL_API_KEY").expect("GRAPHQL_API_KEY environment variable is required");
 
-    // Create event monitor
+    // Create event monitor with API key
     let monitor = EventMonitor::new(
-        &node_url,
-        &bridge_contract_address,
+        graphql_url,
+        &api_key,
         Box::new(CustomEventHandler),
-        mint_start,
-        burn_start,
-    )?;
-
-    let monitor = Arc::new(monitor);
-
+        start_version,
+    );
     loop {
         match monitor.process().await {
             Ok(_) => {
-                println!("📊 Processed events successfully");
+                println!("✅ Processed events successfully");
             }
             Err(e) => {
                 eprintln!("❌ Error processing events: {}", e);

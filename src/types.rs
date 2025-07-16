@@ -93,16 +93,11 @@ pub struct MintEvent {
     /// Minted amount
     pub amount: u64,
     /// BTC transaction ID
-    pub tx_id: Vec<u8>,
-    /// Block height
+    pub tx_id: String,
+    /// BTC block height
     pub block_num: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MintEventWithVersion {
-    pub version: u64,
-    pub sequence_number: u64,
-    pub event: MintEvent,
+    /// Timestamp
+    pub timestamp: u64,
 }
 
 /// Burn event data
@@ -121,19 +116,85 @@ pub struct BurnEvent {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BurnEventWithVersion {
-    pub version: u64,
-    pub sequence_number: u64,
+pub(crate) struct MintEventRaw {
+    pub to_address: String,
+    pub amount: String,
+    pub btc_tx_id: String,
+    pub btc_block_num: String,
+    pub timestamp: String,
+    pub version: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct BurnEventRaw {
+    pub from: String,
+    pub btc_address: String,
+    pub fee_rate: String,
+    pub amount: String,
+    pub operator_id: String,
+    pub timestamp: String,
+    pub version: String,
+}
+
+impl From<MintEventRaw> for MintEvent {
+    fn from(raw: MintEventRaw) -> Self {
+        Self {
+            to: raw.to_address,
+            amount: raw.amount.parse().unwrap_or(0),
+            tx_id: raw.btc_tx_id,
+            block_num: raw.btc_block_num.parse().unwrap_or(0),
+            timestamp: raw.timestamp.parse().unwrap_or(0),
+        }
+    }
+}
+
+impl From<BurnEventRaw> for BurnEvent {
+    fn from(raw: BurnEventRaw) -> Self {
+        Self {
+            from: raw.from,
+            btc_address: raw.btc_address,
+            fee_rate: raw.fee_rate.parse().unwrap_or(0),
+            amount: raw.amount.parse().unwrap_or(0),
+            operator_id: raw.operator_id.parse().unwrap_or(0),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BridgeBurnEvent {
+    pub tx_version: u64,
+    pub timestamp: u64,
     pub event: BurnEvent,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BridgeMintEvent {
+    pub tx_version: u64,
+    pub timestamp: u64,
+    pub event: MintEvent,
 }
 
 /// Bridge event enum
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum BridgeEvent {
     /// Mint event
-    Mint(MintEventWithVersion),
+    Mint(BridgeMintEvent),
     /// Burn event
-    Burn(BurnEventWithVersion),
+    Burn(BridgeBurnEvent),
+}
+
+/// Parse mint event using serde_json
+pub fn parse_mint_event(data: &serde_json::Value) -> Result<MintEvent> {
+    let raw_event: MintEventRaw =
+        serde_json::from_value(data.clone()).context("Failed to parse mint event data")?;
+    Ok(raw_event.into())
+}
+
+/// Parse burn event using serde_json
+pub fn parse_burn_event(data: &serde_json::Value) -> Result<BurnEvent> {
+    let raw_event: BurnEventRaw =
+        serde_json::from_value(data.clone()).context("Failed to parse burn event data")?;
+    Ok(raw_event.into())
 }
 
 /// Constants module

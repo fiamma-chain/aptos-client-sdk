@@ -50,7 +50,7 @@ fn create_example_peg() -> Result<Peg> {
         block_num: 0,
         inclusion_proof: TxProof {
             block_header: vec![],
-            tx_id: vec![],
+            tx_id: vec![0x7],
             tx_index: 0,
             merkle_proof: vec![],
             raw_tx: vec![],

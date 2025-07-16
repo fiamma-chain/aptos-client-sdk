@@ -2,9 +2,15 @@
 //!
 //! Provides functionality to query Aptos Bridge contract configuration and status.
 
-use crate::types::{BridgeEvent, BurnEvent, BurnEventWithVersion, MintEvent, MintEventWithVersion};
+use crate::{
+    types::{parse_burn_event, parse_mint_event, BridgeEvent},
+    BridgeBurnEvent, BridgeMintEvent,
+};
 use anyhow::{anyhow, Context, Result};
-use aptos_sdk::rest_client::{aptos_api_types::Event, Client, Transaction};
+use aptos_sdk::{
+    crypto::HashValue,
+    rest_client::{aptos_api_types::Event, Client, Transaction},
+};
 use url::Url;
 
 /// Query client
@@ -26,8 +32,7 @@ impl QueryClient {
     /// Query transaction status
     pub async fn get_transaction_by_hash(&self, tx_hash: &str) -> Result<Transaction> {
         // Parse transaction hash
-        let tx_hash = tx_hash
-            .parse()
+        let tx_hash = HashValue::from_hex(tx_hash.trim_start_matches("0x"))
             .with_context(|| format!("Invalid transaction hash: {}", tx_hash))?;
 
         let response = self
@@ -86,30 +91,24 @@ impl QueryClient {
 
         // Parse Mint events
         if event_type.ends_with("::bridge::Mint") {
-            let mint_event: MintEvent = serde_json::from_value(event.data.clone())
-                .context("Failed to parse mint event data")?;
+            let mint_event = parse_mint_event(&event.data)?;
 
-            let mint_event_with_version = MintEventWithVersion {
-                version: event.sequence_number.0,
-                sequence_number: event.sequence_number.0,
+            return Ok(Some(BridgeEvent::Mint(BridgeMintEvent {
+                tx_version: 0,
+                timestamp: 0,
                 event: mint_event,
-            };
-
-            return Ok(Some(BridgeEvent::Mint(mint_event_with_version)));
+            })));
         }
 
         // Parse Burn events
         if event_type.ends_with("::bridge::Burn") {
-            let burn_event: BurnEvent = serde_json::from_value(event.data.clone())
-                .context("Failed to parse burn event data")?;
+            let burn_event = parse_burn_event(&event.data)?;
 
-            let burn_event_with_version = BurnEventWithVersion {
-                version: event.sequence_number.0,
-                sequence_number: event.sequence_number.0,
+            return Ok(Some(BridgeEvent::Burn(BridgeBurnEvent {
+                tx_version: 0,
+                timestamp: 0,
                 event: burn_event,
-            };
-
-            return Ok(Some(BridgeEvent::Burn(burn_event_with_version)));
+            })));
         }
 
         // Not a bridge event we're interested in
