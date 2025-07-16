@@ -1,5 +1,5 @@
 [package]
-name = "aptos-bridge-sdk"
+name = "aptos-client-sdk"
 version = "0.1.0"
 edition = "2021"
 
@@ -18,10 +18,6 @@ path = "examples/event_listener.rs"
 [[example]]
 name = "query"
 path = "examples/query.rs"
-
-[[example]]
-name = "permission_checker"
-path = "examples/permission_checker.rs"
 
 
 [dependencies]

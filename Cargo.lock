@@ -345,7 +345,21 @@ dependencies = [
 ]
 
 [[package]]
-name = "aptos-bridge-sdk"
+name = "aptos-cached-packages"
+version = "0.1.0"
+source = "git+https://github.com/aptos-labs/aptos-core?branch=devnet#dee41276c97f3e1d373b3ee5a687a1f46f4923bb"
+dependencies = [
+ "anyhow",
+ "aptos-framework",
+ "aptos-package-builder",
+ "aptos-types",
+ "bcs 0.1.4",
+ "move-core-types",
+ "once_cell",
+]
+
+[[package]]
+name = "aptos-client-sdk"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -360,20 +374,6 @@ dependencies = [
  "serde_json",
  "tokio",
  "url",
-]
-
-[[package]]
-name = "aptos-cached-packages"
-version = "0.1.0"
-source = "git+https://github.com/aptos-labs/aptos-core?branch=devnet#dee41276c97f3e1d373b3ee5a687a1f46f4923bb"
-dependencies = [
- "anyhow",
- "aptos-framework",
- "aptos-package-builder",
- "aptos-types",
- "bcs 0.1.4",
- "move-core-types",
- "once_cell",
 ]
 
 [[package]]
