@@ -11,8 +11,8 @@ pub use query_client::QueryClient;
 
 // Re-export main data types (excluding error types)
 pub use types::{
-    BridgeEvent, BurnEvent, BurnEventWithVersion, MintEvent, MintEventWithVersion, Peg, PegForBcs,
-    ScriptType, TxProof, TxProofForBcs,
+    BridgeEvent, BurnEvent, BurnEventWithVersion, MintEvent, MintEventWithVersion, Peg, ScriptType,
+    TxProof,
 };
 
 // Re-export anyhow::Result for convenience

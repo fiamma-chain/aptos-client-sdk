@@ -9,13 +9,12 @@ use std::env;
 #[tokio::main]
 async fn main() -> Result<()> {
     dotenv::dotenv().ok();
-    // Get configuration from environment variables
     let node_url = "https://fullnode.testnet.aptoslabs.com/v1";
     let private_key =
         env::var("PRIVATE_KEY").expect("PRIVATE_KEY environment variable is required");
     let bridge_contract_address =
-        "0x348fb76b8668c1c4e5e0d0e9fe13b926dfeb309ec720947f4050ddc6c974d459";
-    let btc_light_client = "0x105deccf9cb2725b9312ed0cb532490448a261e86f21df67ade4d3dc4221e41a";
+        "0x2e5df32d3db81510b01dc0ec2fd6220b43b29b1e2a98b48a013a774f10726e5b";
+    let btc_light_client = "0x67dd32fe9ee2e6d7c6016d51d912f5c7cf02032e9fe94b9c2db1b2762196952d";
 
     let mut bridge_client = BridgeClient::new(
         &node_url,

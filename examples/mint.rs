@@ -17,8 +17,8 @@ async fn main() -> Result<()> {
     let private_key =
         env::var("PRIVATE_KEY").expect("PRIVATE_KEY environment variable is required");
     let bridge_contract_address =
-        "0x348fb76b8668c1c4e5e0d0e9fe13b926dfeb309ec720947f4050ddc6c974d459";
-    let btc_light_client = "0x105deccf9cb2725b9312ed0cb532490448a261e86f21df67ade4d3dc4221e41a";
+        "0x2e5df32d3db81510b01dc0ec2fd6220b43b29b1e2a98b48a013a774f10726e5b";
+    let btc_light_client = "0x67dd32fe9ee2e6d7c6016d51d912f5c7cf02032e9fe94b9c2db1b2762196952d";
 
     let mut bridge_client = BridgeClient::new(
         &node_url,
@@ -28,24 +28,22 @@ async fn main() -> Result<()> {
     )
     .await?;
 
-    // Create example pegs
-    let pegs = create_example_pegs()?;
+    // Create example peg
+    let peg = create_example_peg()?;
 
     // Display peg information
-    for (i, peg) in pegs.iter().enumerate() {
-        println!("Peg {}: {} satoshi to {}", i + 1, peg.value, peg.to);
-    }
+    println!("Peg: {} satoshi to {}", peg.value, peg.to);
 
     // Execute mint operation
-    let tx_hash = bridge_client.mint(pegs).await?;
+    let tx_hash = bridge_client.mint(peg).await?;
 
     println!("Mint transaction hash: {}", tx_hash);
 
     Ok(())
 }
 
-fn create_example_pegs() -> Result<Vec<Peg>> {
-    let pegs = vec![Peg {
+fn create_example_peg() -> Result<Peg> {
+    let peg = Peg {
         to: "0x2823126c1fd6124b0496b89dcb1de2ae0a71011baadf058c6a12ee22d0024cbe".to_string(),
         value: 500000,
         // For Local testing, we don't need to provide the block number and inclusion proof
@@ -60,7 +58,7 @@ fn create_example_pegs() -> Result<Vec<Peg>> {
         tx_out_ix: 0,
         dest_script_hash: vec![],
         script_type: ScriptType::P2WSH,
-    }];
+    };
 
-    Ok(pegs)
+    Ok(peg)
 }

@@ -2,8 +2,8 @@
 //!
 //! Provides core functionality for interacting with Aptos Bridge contracts.
 
-use crate::types::{constants::*, Peg, PegForBcs};
-use crate::utils::{parse_account_address, validate_btc_address};
+use crate::types::{constants::*, Peg};
+use crate::utils::parse_account_address;
 use crate::QueryClient;
 
 use anyhow::{Context, Result};
@@ -70,16 +70,10 @@ impl BridgeClient {
         })
     }
 
-    /// Mint tokens
-    pub async fn mint(&mut self, pegs: Vec<Peg>) -> Result<String> {
-        // Convert to BCS-serializable format
-        let pegs_for_bcs: Vec<PegForBcs> = pegs
-            .iter()
-            .map(|peg| PegForBcs::try_from(peg))
-            .collect::<Result<Vec<_>, _>>()?;
-
-        // Serialize the vector as a single argument
-        let args = bcs::to_bytes(&pegs_for_bcs).context("Failed to serialize pegs for BCS")?;
+    /// Mint tokens based on BTC deposits
+    pub async fn mint(&mut self, peg: Peg) -> Result<String> {
+        // Serialize peg parameters using the new method
+        let args = peg.serialize_to_args()?;
 
         // Create Entry Function
         let entry_function = EntryFunction::new(
@@ -89,7 +83,7 @@ impl BridgeClient {
             ),
             Identifier::new("mint").unwrap(),
             vec![], // No type parameters
-            vec![args],
+            args,
         );
 
         // Execute transaction
@@ -108,9 +102,6 @@ impl BridgeClient {
         amount: u64,
         operator_id: u64,
     ) -> Result<String> {
-        // Validate BTC address format
-        validate_btc_address(&btc_address)?;
-
         // Serialize parameters
         let args = vec![
             bcs::to_bytes(&btc_address).context("Failed to serialize BTC address")?,
@@ -147,7 +138,7 @@ impl BridgeClient {
                     address: self.bridge_contract_address.into(),
                     name: IdentifierWrapper(Identifier::new("bridge").unwrap()),
                 },
-                name: IdentifierWrapper(Identifier::new("get_min_confirmations").unwrap()),
+                name: IdentifierWrapper(Identifier::new("min_confirmations").unwrap()),
             },
             type_arguments: vec![],
             arguments: vec![],
@@ -158,7 +149,7 @@ impl BridgeClient {
             .rest_client
             .view(&view_request, None)
             .await
-            .context("Failed to call get_min_confirmations view function")?;
+            .context("Failed to call min_confirmations view function")?;
 
         // Parse the response
         let result = response
@@ -218,9 +209,14 @@ impl BridgeClient {
             .inner()
             .chain_id;
 
-        let sequence_number = self.get_sequence_number().await?;
+        let sequence_number = self
+            .rest_client
+            .get_account_sequence_number(self.account.address())
+            .await
+            .context("Failed to get sequence number from Aptos node")?;
 
-        self.account.set_sequence_number(sequence_number);
+        self.account
+            .set_sequence_number(sequence_number.inner().clone());
 
         // First create account with sequence number 0 to get the address
 
@@ -248,15 +244,6 @@ impl BridgeClient {
             .context("Failed to submit transaction to Aptos node")?;
 
         Ok(response.inner().hash.to_string())
-    }
-
-    async fn get_sequence_number(&self) -> Result<u64> {
-        let account = self
-            .rest_client
-            .get_account(self.account.address())
-            .await
-            .context("Failed to get account from Aptos node")?;
-        Ok(account.inner().sequence_number)
     }
 }
 

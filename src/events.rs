@@ -90,7 +90,7 @@ impl EventMonitor {
     async fn fetch_mint_events(&self, start: u64) -> Result<Vec<MintEventWithVersion>> {
         // For #[event] structs, the struct_tag is the full event type path
         let struct_tag = format!("{}::bridge::Mint", self.contract_address.to_hex_literal());
-        let field_name = "events";
+        let field_name = "__FIELD_NAME__";
         let response = self
             .rest_client
             .get_account_events(
@@ -134,17 +134,10 @@ impl EventMonitor {
     /// Fetch burn events
     async fn fetch_burn_events(&self, start: u64) -> Result<Vec<BurnEventWithVersion>> {
         let struct_tag = format!("{}::bridge::Burn", self.contract_address.to_hex_literal());
-        let field_name = "events";
-
+        println!("burn struct_tag: {}", struct_tag);
         let response = self
             .rest_client
-            .get_account_events(
-                self.contract_address,
-                &struct_tag,
-                field_name,
-                Some(start),
-                None,
-            )
+            .get_account_events(self.contract_address, &struct_tag, "", Some(start), None)
             .await
             .context("Failed to fetch burn events from Aptos node")?;
 

@@ -2,8 +2,9 @@
 //!
 //! Provides functionality to query Aptos Bridge contract configuration and status.
 
-use anyhow::{Context, Result};
-use aptos_sdk::rest_client::{Client, Transaction};
+use crate::types::{BridgeEvent, BurnEvent, BurnEventWithVersion, MintEvent, MintEventWithVersion};
+use anyhow::{anyhow, Context, Result};
+use aptos_sdk::rest_client::{aptos_api_types::Event, Client, Transaction};
 use url::Url;
 
 /// Query client
@@ -36,5 +37,82 @@ impl QueryClient {
             .context("Failed to get transaction from Aptos node")?;
 
         Ok(response.inner().clone())
+    }
+
+    /// Get bridge events from user transaction hash
+    pub async fn get_bridge_events_by_hash(
+        &self,
+        tx_hash: &str,
+        bridge_contract_address: &str,
+    ) -> Result<Vec<BridgeEvent>> {
+        // Get transaction details
+        let transaction = self.get_transaction_by_hash(tx_hash).await?;
+
+        // Only process user transactions
+        let events = match transaction {
+            Transaction::UserTransaction(user_tx) => user_tx.events,
+            _ => {
+                return Err(anyhow!(
+                    "Transaction {} is not a user transaction. Only user and not pending transactions are supported.",
+                    tx_hash
+                ));
+            }
+        };
+
+        let mut bridge_events = Vec::new();
+
+        // Parse each event
+        for event in &events {
+            if let Some(bridge_event) = self.parse_bridge_event(event, bridge_contract_address)? {
+                bridge_events.push(bridge_event);
+            }
+        }
+
+        Ok(bridge_events)
+    }
+
+    /// Parse a single event to check if it's a bridge event
+    fn parse_bridge_event(
+        &self,
+        event: &Event,
+        bridge_contract_address: &str,
+    ) -> Result<Option<BridgeEvent>> {
+        let event_type = &event.typ.to_string();
+
+        // Check if this event is from our bridge contract
+        if !event_type.starts_with(&format!("{}::", bridge_contract_address)) {
+            return Ok(None);
+        }
+
+        // Parse Mint events
+        if event_type.ends_with("::bridge::Mint") {
+            let mint_event: MintEvent = serde_json::from_value(event.data.clone())
+                .context("Failed to parse mint event data")?;
+
+            let mint_event_with_version = MintEventWithVersion {
+                version: event.sequence_number.0,
+                sequence_number: event.sequence_number.0,
+                event: mint_event,
+            };
+
+            return Ok(Some(BridgeEvent::Mint(mint_event_with_version)));
+        }
+
+        // Parse Burn events
+        if event_type.ends_with("::bridge::Burn") {
+            let burn_event: BurnEvent = serde_json::from_value(event.data.clone())
+                .context("Failed to parse burn event data")?;
+
+            let burn_event_with_version = BurnEventWithVersion {
+                version: event.sequence_number.0,
+                sequence_number: event.sequence_number.0,
+                event: burn_event,
+            };
+
+            return Ok(Some(BridgeEvent::Burn(burn_event_with_version)));
+        }
+
+        // Not a bridge event we're interested in
+        Ok(None)
     }
 }
