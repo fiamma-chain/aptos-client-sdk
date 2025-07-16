@@ -3,7 +3,7 @@
 //! This example shows how to query bridge events from a user transaction hash.
 
 use anyhow::Result;
-use aptos_bridge_sdk::QueryClient;
+use aptos_client_sdk::QueryClient;
 
 #[tokio::main]
 async fn main() -> Result<()> {

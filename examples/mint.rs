@@ -3,7 +3,7 @@
 //! This example shows how to use the Aptos Bridge SDK to mint tokens.
 
 use anyhow::Result;
-use aptos_bridge_sdk::{
+use aptos_client_sdk::{
     types::{Peg, ScriptType, TxProof},
     BridgeClient,
 };

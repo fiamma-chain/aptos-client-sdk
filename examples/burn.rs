@@ -3,7 +3,7 @@
 //! This example shows how to use the Aptos Bridge SDK to burn tokens.
 
 use anyhow::Result;
-use aptos_bridge_sdk::BridgeClient;
+use aptos_client_sdk::BridgeClient;
 use std::env;
 
 #[tokio::main]

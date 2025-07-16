@@ -3,7 +3,7 @@
 //! This example shows how to use the Aptos Bridge SDK to listen to bridge events.
 
 use anyhow::Result;
-use aptos_bridge_sdk::{BurnEvent, EventHandler, EventMonitor, MintEvent};
+use aptos_client_sdk::{BurnEvent, EventHandler, EventMonitor, MintEvent};
 use async_trait::async_trait;
 use std::env;
 
