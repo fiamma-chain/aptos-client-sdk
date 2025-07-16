@@ -3,10 +3,7 @@
 //! This example shows how to use the Aptos Bridge SDK to listen to bridge events.
 
 use anyhow::Result;
-use aptos_bridge_sdk::{
-    types::{BridgeBurnEvent, BridgeMintEvent},
-    EventHandler, EventMonitor,
-};
+use aptos_bridge_sdk::{BurnEvent, EventHandler, EventMonitor, MintEvent};
 use async_trait::async_trait;
 use std::env;
 
@@ -14,14 +11,15 @@ struct CustomEventHandler;
 
 #[async_trait]
 impl EventHandler for CustomEventHandler {
-    async fn handle_mint(&self, event: BridgeMintEvent) -> Result<()> {
+    async fn handle_mint(&self, event: MintEvent) -> Result<()> {
         let event_data = format!(
-            "🟢 Mint Event - To: {}, Amount: {}, Block: {}, Version: {}, Timestamp: {}",
-            event.event.to,
-            event.event.amount,
-            event.event.block_num,
-            event.tx_version,
-            event.timestamp,
+            "🟢 Mint Event - To: {}, Amount: {}, BTC Block: {}, BTC Tx: {}, Version: {}, Timestamp: {}",
+            event.to_address,
+            event.amount,
+            event.btc_block_num,
+            event.btc_tx_id,
+            event.version.unwrap_or(0),
+            event.timestamp.unwrap_or(0),
         );
 
         println!("{}", event_data);
@@ -29,16 +27,16 @@ impl EventHandler for CustomEventHandler {
         Ok(())
     }
 
-    async fn handle_burn(&self, event: BridgeBurnEvent) -> Result<()> {
+    async fn handle_burn(&self, event: BurnEvent) -> Result<()> {
         let event_data = format!(
             "🔴 Burn Event - From: {}, To: {}, Amount: {}, FeeRate: {}, Operator: {}, Version: {}, Timestamp: {}",
-            event.event.from,
-            event.event.btc_address,
-            event.event.amount,
-            event.event.fee_rate,
-            event.event.operator_id,
-            event.tx_version,
-            event.timestamp,
+            event.from_address,
+            event.btc_address,
+            event.amount,
+            event.fee_rate,
+            event.operator_id,
+            event.version.unwrap_or(0),
+            event.timestamp.unwrap_or(0),
         );
 
         println!("{}", event_data);
@@ -54,7 +52,7 @@ async fn main() -> Result<()> {
 
     // Use your custom GraphQL index URL
     let graphql_url =
-        "https://api.testnet.aptoslabs.com/nocode/v1/api/cmd62f87p006ks601xpbky5mx/v1/graphql";
+        "https://api.testnet.aptoslabs.com/nocode/v1/api/cmd66memj007os601224cvlmd/v1/graphql";
     let start_version = 0;
     let poll_interval = 10; // seconds
 

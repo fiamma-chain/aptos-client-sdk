@@ -12,9 +12,9 @@ async fn main() -> Result<()> {
     let query_client = QueryClient::new(node_url)?;
 
     let bridge_contract_address =
-        "0x2e5df32d3db81510b01dc0ec2fd6220b43b29b1e2a98b48a013a774f10726e5b";
+        "0x6b891d58da6e4fd7bb2ab229917833c47cb34d8d60cf75e93d717bda43eee387";
 
-    let tx_hash = "0xc0d462ffb1e03b6d72a15a82055f05f573a089acb77aff1e612d7476f3e1075d";
+    let tx_hash = "0x7c0bf45365fe3fd63f61f78ca01939cfd278e95f57f0d991b28f96d328a2bf33";
 
     match query_client
         .get_bridge_events_by_hash(tx_hash, bridge_contract_address)

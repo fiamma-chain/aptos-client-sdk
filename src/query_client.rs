@@ -2,10 +2,7 @@
 //!
 //! Provides functionality to query Aptos Bridge contract configuration and status.
 
-use crate::{
-    types::{parse_burn_event, parse_mint_event, BridgeEvent},
-    BridgeBurnEvent, BridgeMintEvent,
-};
+use crate::types::{parse_burn_event, parse_mint_event, BridgeEvent};
 use anyhow::{anyhow, Context, Result};
 use aptos_sdk::{
     crypto::HashValue,
@@ -63,9 +60,7 @@ impl QueryClient {
                 ));
             }
         };
-
         let mut bridge_events = Vec::new();
-
         // Parse each event
         for event in &events {
             if let Some(bridge_event) = self.parse_bridge_event(event, bridge_contract_address)? {
@@ -88,27 +83,16 @@ impl QueryClient {
         if !event_type.starts_with(&format!("{}::", bridge_contract_address)) {
             return Ok(None);
         }
-
         // Parse Mint events
         if event_type.ends_with("::bridge::Mint") {
             let mint_event = parse_mint_event(&event.data)?;
-
-            return Ok(Some(BridgeEvent::Mint(BridgeMintEvent {
-                tx_version: 0,
-                timestamp: 0,
-                event: mint_event,
-            })));
+            return Ok(Some(BridgeEvent::Mint(mint_event)));
         }
 
         // Parse Burn events
         if event_type.ends_with("::bridge::Burn") {
             let burn_event = parse_burn_event(&event.data)?;
-
-            return Ok(Some(BridgeEvent::Burn(BridgeBurnEvent {
-                tx_version: 0,
-                timestamp: 0,
-                event: burn_event,
-            })));
+            return Ok(Some(BridgeEvent::Burn(burn_event)));
         }
 
         // Not a bridge event we're interested in

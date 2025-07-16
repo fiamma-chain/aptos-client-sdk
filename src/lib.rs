@@ -10,9 +10,4 @@ pub use events::{EventHandler, EventMonitor};
 pub use query_client::QueryClient;
 
 // Re-export main data types (excluding error types)
-pub use types::{
-    BridgeBurnEvent, BridgeEvent, BridgeMintEvent, BurnEvent, MintEvent, Peg, ScriptType, TxProof,
-};
-
-// Re-export anyhow::Result for convenience
-pub use anyhow::Result;
+pub use types::{BridgeEvent, BurnEvent, MintEvent, Peg, ScriptType, TxProof};

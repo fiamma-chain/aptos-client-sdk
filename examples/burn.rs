@@ -13,7 +13,7 @@ async fn main() -> Result<()> {
     let private_key =
         env::var("PRIVATE_KEY").expect("PRIVATE_KEY environment variable is required");
     let bridge_contract_address =
-        "0x2e5df32d3db81510b01dc0ec2fd6220b43b29b1e2a98b48a013a774f10726e5b";
+        "0x6b891d58da6e4fd7bb2ab229917833c47cb34d8d60cf75e93d717bda43eee387";
     let btc_light_client = "0x67dd32fe9ee2e6d7c6016d51d912f5c7cf02032e9fe94b9c2db1b2762196952d";
 
     let mut bridge_client = BridgeClient::new(

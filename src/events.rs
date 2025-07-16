@@ -2,11 +2,8 @@
 //!
 //! Provides functionality to listen to Aptos Bridge contract events.
 
-use crate::types::{
-    parse_burn_event, parse_mint_event, BridgeBurnEvent, BridgeMintEvent, BurnEventRaw,
-    MintEventRaw,
-};
-use crate::BridgeEvent;
+use crate::types::{parse_burn_event, parse_mint_event, BurnEventRaw, MintEventRaw};
+use crate::{BridgeEvent, BurnEvent, MintEvent};
 
 use anyhow::{Context, Result};
 use async_trait::async_trait;
@@ -35,8 +32,8 @@ struct GraphQLData {
 /// Event handler trait
 #[async_trait]
 pub trait EventHandler: Send + Sync {
-    async fn handle_mint(&self, event: BridgeMintEvent) -> Result<()>;
-    async fn handle_burn(&self, event: BridgeBurnEvent) -> Result<()>;
+    async fn handle_mint(&self, event: MintEvent) -> Result<()>;
+    async fn handle_burn(&self, event: BurnEvent) -> Result<()>;
 }
 
 /// Event monitor
@@ -80,8 +77,8 @@ impl EventMonitor {
 
         // Sort by version
         events.sort_by_key(|event| match event {
-            BridgeEvent::Mint(e) => e.tx_version,
-            BridgeEvent::Burn(e) => e.tx_version,
+            BridgeEvent::Mint(e) => e.version.unwrap_or(0),
+            BridgeEvent::Burn(e) => e.version.unwrap_or(0),
         });
 
         Ok(events)
@@ -92,7 +89,7 @@ impl EventMonitor {
         let query = r#"
             query GetBridgeEvents($startVersion: numeric!) {
                 bridge_burn_events(where: {version: {_gt: $startVersion}}, order_by: {version: asc}) {
-                    amount, btc_address, fee_rate, from, operator_id, timestamp, version
+                    amount, btc_address, fee_rate, from_address, operator_id, timestamp, version
                 }
                 bridge_mint_events(where: {version: {_gt: $startVersion}}, order_by: {version: asc}) {
                     amount, btc_block_num, btc_tx_id, timestamp, to_address, version
@@ -121,9 +118,11 @@ impl EventMonitor {
             return Err(anyhow::anyhow!("GraphQL errors: {:?}", errors));
         }
 
-        response
+        let data = response
             .data
-            .ok_or_else(|| anyhow::anyhow!("No data in GraphQL response"))
+            .ok_or_else(|| anyhow::anyhow!("No data in GraphQL response"))?;
+
+        Ok(data)
     }
 
     /// Process mint events
@@ -144,28 +143,14 @@ impl EventMonitor {
 
     /// Create mint event from raw data
     fn create_mint_event(&self, raw: MintEventRaw) -> Result<BridgeEvent> {
-        let version = raw.version.parse().unwrap_or(0);
-        let timestamp = raw.timestamp.parse().unwrap_or(0);
         let event = parse_mint_event(&serde_json::to_value(&raw)?)?;
-
-        Ok(BridgeEvent::Mint(BridgeMintEvent {
-            tx_version: version,
-            timestamp,
-            event,
-        }))
+        Ok(BridgeEvent::Mint(event))
     }
 
     /// Create burn event from raw data
     fn create_burn_event(&self, raw: BurnEventRaw) -> Result<BridgeEvent> {
-        let version = raw.version.parse().unwrap_or(0);
-        let timestamp = raw.timestamp.parse().unwrap_or(0);
         let event = parse_burn_event(&serde_json::to_value(&raw)?)?;
-
-        Ok(BridgeEvent::Burn(BridgeBurnEvent {
-            tx_version: version,
-            timestamp,
-            event,
-        }))
+        Ok(BridgeEvent::Burn(event))
     }
 
     /// Handle all events

@@ -3,6 +3,7 @@
 //! This module defines all data types required for interacting with Aptos Bridge contracts.
 
 use anyhow::{Context, Result};
+use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
@@ -89,22 +90,24 @@ impl Peg {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MintEvent {
     /// Recipient address
-    pub to: String,
+    pub to_address: String,
     /// Minted amount
     pub amount: u64,
     /// BTC transaction ID
-    pub tx_id: String,
+    pub btc_tx_id: String,
     /// BTC block height
-    pub block_num: u64,
+    pub btc_block_num: u64,
     /// Timestamp
-    pub timestamp: u64,
+    pub timestamp: Option<u64>,
+    /// Version
+    pub version: Option<u64>,
 }
 
 /// Burn event data
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BurnEvent {
     /// Sender address
-    pub from: String,
+    pub from_address: String,
     /// BTC address
     pub btc_address: String,
     /// Fee rate
@@ -113,37 +116,60 @@ pub struct BurnEvent {
     pub amount: u64,
     /// Operator ID
     pub operator_id: u64,
+    /// Timestamp
+    pub timestamp: Option<u64>,
+    /// Version
+    pub version: Option<u64>,
 }
 
+/// Raw mint event data (supports both GraphQL and transaction event sources)
+///
+/// This structure can handle event data from two sources:
+/// - GraphQL queries: includes `timestamp` and `version` fields
+/// - Transaction events: may not include these fields (will be None)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct MintEventRaw {
     pub to_address: String,
     pub amount: String,
     pub btc_tx_id: String,
     pub btc_block_num: String,
-    pub timestamp: String,
-    pub version: String,
+    /// Optional timestamp (present in GraphQL, may be absent in transaction events)
+    #[serde(default)]
+    pub timestamp: Option<String>,
+    /// Optional version (present in GraphQL, may be absent in transaction events)
+    #[serde(default)]
+    pub version: Option<String>,
 }
 
+/// Raw burn event data (supports both GraphQL and transaction event sources)
+///
+/// This structure can handle event data from two sources:
+/// - GraphQL queries: includes `timestamp` and `version` fields  
+/// - Transaction events: may not include these fields (will be None)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct BurnEventRaw {
-    pub from: String,
+    pub from_address: String,
     pub btc_address: String,
     pub fee_rate: String,
     pub amount: String,
     pub operator_id: String,
-    pub timestamp: String,
-    pub version: String,
+    /// Optional timestamp (present in GraphQL, may be absent in transaction events)
+    #[serde(default)]
+    pub timestamp: Option<String>,
+    /// Optional version (present in GraphQL, may be absent in transaction events)
+    #[serde(default)]
+    pub version: Option<String>,
 }
 
 impl From<MintEventRaw> for MintEvent {
     fn from(raw: MintEventRaw) -> Self {
         Self {
-            to: raw.to_address,
+            to_address: raw.to_address,
             amount: raw.amount.parse().unwrap_or(0),
-            tx_id: raw.btc_tx_id,
-            block_num: raw.btc_block_num.parse().unwrap_or(0),
-            timestamp: raw.timestamp.parse().unwrap_or(0),
+            btc_tx_id: raw.btc_tx_id,
+            btc_block_num: raw.btc_block_num.parse().unwrap_or(0),
+            timestamp: raw.timestamp.and_then(|t| parse_timestamp(&t)),
+            version: raw.version.and_then(|v| v.parse().ok()),
         }
     }
 }
@@ -151,36 +177,24 @@ impl From<MintEventRaw> for MintEvent {
 impl From<BurnEventRaw> for BurnEvent {
     fn from(raw: BurnEventRaw) -> Self {
         Self {
-            from: raw.from,
+            from_address: raw.from_address,
             btc_address: raw.btc_address,
             fee_rate: raw.fee_rate.parse().unwrap_or(0),
             amount: raw.amount.parse().unwrap_or(0),
             operator_id: raw.operator_id.parse().unwrap_or(0),
+            timestamp: raw.timestamp.and_then(|t| parse_timestamp(&t)),
+            version: raw.version.and_then(|v| v.parse().ok()),
         }
     }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BridgeBurnEvent {
-    pub tx_version: u64,
-    pub timestamp: u64,
-    pub event: BurnEvent,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BridgeMintEvent {
-    pub tx_version: u64,
-    pub timestamp: u64,
-    pub event: MintEvent,
 }
 
 /// Bridge event enum
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum BridgeEvent {
     /// Mint event
-    Mint(BridgeMintEvent),
+    Mint(MintEvent),
     /// Burn event
-    Burn(BridgeBurnEvent),
+    Burn(BurnEvent),
 }
 
 /// Parse mint event using serde_json
@@ -200,4 +214,14 @@ pub fn parse_burn_event(data: &serde_json::Value) -> Result<BurnEvent> {
 /// Constants module
 pub mod constants {
     pub const EXPIRATION_TIMESTAMP_SECS: u64 = 60;
+}
+
+/// Parse ISO 8601 timestamp string to Unix timestamp (u64)
+/// Assumes timestamp without timezone info is in UTC
+fn parse_timestamp(timestamp_str: &str) -> Option<u64> {
+    // First try to parse as NaiveDateTime (no timezone), then treat as UTC
+    if let Ok(naive_dt) = NaiveDateTime::parse_from_str(timestamp_str, "%Y-%m-%dT%H:%M:%S") {
+        return Some(naive_dt.and_utc().timestamp() as u64);
+    }
+    None
 }
