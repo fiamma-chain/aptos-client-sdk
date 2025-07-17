@@ -41,7 +41,7 @@ impl BridgeClient {
     /// Create new Bridge client
     pub async fn new(
         node_url: &str,
-        aptos_api_key: &str,
+        aptos_api_key: Option<&str>,
         private_key_hex: &str,
         bridge_contract_address: &str,
         btc_light_client: &str,
@@ -57,9 +57,11 @@ impl BridgeClient {
         );
 
         // Create REST client
-        let rest_client = ClientBuilder::new(aptos_base_url)
-            .api_key(aptos_api_key)?
-            .build();
+        let mut client_builder = ClientBuilder::new(aptos_base_url);
+        if let Some(api_key) = aptos_api_key {
+            client_builder = client_builder.api_key(api_key)?;
+        }
+        let rest_client = client_builder.build();
 
         // Create query client
         let query_client = QueryClient::new(node_url, aptos_api_key)?;

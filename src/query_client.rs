@@ -18,12 +18,16 @@ pub struct QueryClient {
 
 impl QueryClient {
     /// Create new query client
-    pub fn new(node_url: &str, aptos_api_key: &str) -> Result<Self> {
-        let rest_client = ClientBuilder::new(AptosBaseUrl::Custom(
+    pub fn new(node_url: &str, aptos_api_key: Option<&str>) -> Result<Self> {
+        let mut client_builder = ClientBuilder::new(AptosBaseUrl::Custom(
             Url::parse(node_url).with_context(|| format!("Invalid node URL: {}", node_url))?,
-        ))
-        .api_key(aptos_api_key)?
-        .build();
+        ));
+
+        if let Some(api_key) = aptos_api_key {
+            client_builder = client_builder.api_key(api_key)?;
+        }
+
+        let rest_client = client_builder.build();
 
         Ok(Self { rest_client })
     }
