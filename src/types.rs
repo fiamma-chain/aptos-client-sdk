@@ -17,7 +17,7 @@ pub struct TxProof {
     /// Transaction index in block
     pub tx_index: u64,
     /// Merkle proof path
-    pub merkle_proof: Vec<u8>,
+    pub merkle_proof: Vec<Vec<u8>>,
     /// Raw transaction data
     pub raw_tx: Vec<u8>,
 }

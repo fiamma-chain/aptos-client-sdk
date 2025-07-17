@@ -4,7 +4,8 @@
 
 use anyhow::Result;
 use aptos_client_sdk::BridgeClient;
-use std::env;
+use std::{env, time::Duration};
+use tokio::time;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -15,8 +16,8 @@ async fn main() -> Result<()> {
 
     let aptos_api_key = env::var("APTOS_API_KEY").ok();
     let bridge_contract_address =
-        "0x6b891d58da6e4fd7bb2ab229917833c47cb34d8d60cf75e93d717bda43eee387";
-    let btc_light_client = "0x67dd32fe9ee2e6d7c6016d51d912f5c7cf02032e9fe94b9c2db1b2762196952d";
+        "0xc70be23fa7b086eb766776ca78e0d0633b5c0d1a58fa1b6e1f2207f481452e1c";
+    let btc_light_client = "0x4f6417cea8184f3fbf73f63c26f6923da7c73ccb27feefacf5c31c4abcafda5e";
 
     let mut bridge_client = BridgeClient::new(
         &node_url,
@@ -24,8 +25,7 @@ async fn main() -> Result<()> {
         &private_key,
         &bridge_contract_address,
         &btc_light_client,
-    )
-    .await?;
+    )?;
     // Burn operation parameters
     let btc_address = "bcrt1phcnl4zcl2fu047pv4wx6y058v8u0n02at6lthvm7pcf2wrvjm5tqatn90k";
     let amount = 500000;
@@ -37,7 +37,13 @@ async fn main() -> Result<()> {
         .burn(btc_address.to_string(), fee_rate, amount, operator_id)
         .await?;
 
-    println!("Burn transaction hash: {}", tx_hash);
+    time::sleep(Duration::from_secs(5)).await;
+    let tx = bridge_client.get_transaction_by_hash(&tx_hash).await?;
+    if tx.success() {
+        println!("Burn transaction successful, hash: {}", tx_hash);
+    } else {
+        println!("Burn transaction failed, error: {}", tx.vm_status());
+    }
 
     Ok(())
 }

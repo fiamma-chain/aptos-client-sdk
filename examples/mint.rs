@@ -7,7 +7,8 @@ use aptos_client_sdk::{
     types::{Peg, ScriptType, TxProof},
     BridgeClient,
 };
-use std::env;
+use std::{env, time::Duration};
+use tokio::time;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -18,8 +19,8 @@ async fn main() -> Result<()> {
         env::var("PRIVATE_KEY").expect("PRIVATE_KEY environment variable is required");
     let aptos_api_key = env::var("APTOS_API_KEY").ok();
     let bridge_contract_address =
-        "0x6b891d58da6e4fd7bb2ab229917833c47cb34d8d60cf75e93d717bda43eee387";
-    let btc_light_client = "0x67dd32fe9ee2e6d7c6016d51d912f5c7cf02032e9fe94b9c2db1b2762196952d";
+        "0xc70be23fa7b086eb766776ca78e0d0633b5c0d1a58fa1b6e1f2207f481452e1c";
+    let btc_light_client = "0x4f6417cea8184f3fbf73f63c26f6923da7c73ccb27feefacf5c31c4abcafda5e";
 
     let mut bridge_client = BridgeClient::new(
         &node_url,
@@ -27,8 +28,7 @@ async fn main() -> Result<()> {
         &private_key,
         &bridge_contract_address,
         &btc_light_client,
-    )
-    .await?;
+    )?;
 
     // Create example peg
     let peg = create_example_peg()?;
@@ -38,8 +38,14 @@ async fn main() -> Result<()> {
 
     // Execute mint operation
     let tx_hash = bridge_client.mint(peg).await?;
+    time::sleep(Duration::from_secs(5)).await;
+    let tx = bridge_client.get_transaction_by_hash(&tx_hash).await?;
 
-    println!("Mint transaction hash: {}", tx_hash);
+    if tx.success() {
+        println!("Mint transaction successful, hash: {}", tx_hash);
+    } else {
+        println!("Mint transaction failed, error: {}", tx.vm_status());
+    }
 
     Ok(())
 }
@@ -52,7 +58,7 @@ fn create_example_peg() -> Result<Peg> {
         block_num: 0,
         inclusion_proof: TxProof {
             block_header: vec![],
-            tx_id: vec![0x33],
+            tx_id: vec![0x23],
             tx_index: 0,
             merkle_proof: vec![],
             raw_tx: vec![],

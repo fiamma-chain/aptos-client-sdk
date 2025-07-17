@@ -39,7 +39,7 @@ pub struct BridgeClient {
 
 impl BridgeClient {
     /// Create new Bridge client
-    pub async fn new(
+    pub fn new(
         node_url: &str,
         aptos_api_key: Option<&str>,
         private_key_hex: &str,

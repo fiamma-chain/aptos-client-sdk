@@ -15,9 +15,9 @@ async fn main() -> Result<()> {
     let query_client = QueryClient::new(node_url, aptos_api_key.as_deref())?;
 
     let bridge_contract_address =
-        "0x6b891d58da6e4fd7bb2ab229917833c47cb34d8d60cf75e93d717bda43eee387";
+        "0xc70be23fa7b086eb766776ca78e0d0633b5c0d1a58fa1b6e1f2207f481452e1c";
 
-    let tx_hash = "0x7c0bf45365fe3fd63f61f78ca01939cfd278e95f57f0d991b28f96d328a2bf33";
+    let tx_hash = "0x162357b8a8044fede477cbd17b2ba61cfb15608152f7a9cdf2787b8e1754b942";
 
     match query_client
         .get_bridge_events_by_hash(tx_hash, bridge_contract_address)
