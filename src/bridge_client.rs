@@ -79,7 +79,7 @@ impl BridgeClient {
     }
 
     /// Mint tokens based on BTC deposits
-    pub async fn mint(&mut self, peg: Peg) -> Result<String> {
+    pub async fn mint(&self, peg: Peg) -> Result<String> {
         // Serialize peg parameters using the new method
         let args = peg.serialize_to_args()?;
 
@@ -104,7 +104,7 @@ impl BridgeClient {
 
     /// Burn tokens
     pub async fn burn(
-        &mut self,
+        &self,
         btc_address: String,
         fee_rate: u64,
         amount: u64,
@@ -208,7 +208,7 @@ impl BridgeClient {
     }
 
     /// Generic method for executing transactions
-    async fn execute_transaction(&mut self, payload: TransactionPayload) -> Result<String> {
+    async fn execute_transaction(&self, payload: TransactionPayload) -> Result<String> {
         let chain_id = self
             .rest_client
             .get_index()

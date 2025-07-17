@@ -19,7 +19,7 @@ async fn main() -> Result<()> {
         "0xc70be23fa7b086eb766776ca78e0d0633b5c0d1a58fa1b6e1f2207f481452e1c";
     let btc_light_client = "0x4f6417cea8184f3fbf73f63c26f6923da7c73ccb27feefacf5c31c4abcafda5e";
 
-    let mut bridge_client = BridgeClient::new(
+    let bridge_client = BridgeClient::new(
         &node_url,
         aptos_api_key.as_deref(),
         &private_key,
