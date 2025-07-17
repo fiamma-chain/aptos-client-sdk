@@ -253,6 +253,11 @@ impl BridgeClient {
 
         Ok(response.inner().hash.to_string())
     }
+
+    pub fn validate_aptos_address(&self, address: &str) -> Result<()> {
+        parse_account_address(address).map(|_| ())?;
+        Ok(())
+    }
 }
 
 impl std::ops::Deref for BridgeClient {
