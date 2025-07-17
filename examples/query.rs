@@ -4,12 +4,16 @@
 
 use anyhow::Result;
 use aptos_client_sdk::QueryClient;
+use std::env;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    dotenv::dotenv().ok();
     // Initialize query client
     let node_url = "https://fullnode.testnet.aptoslabs.com/v1";
-    let query_client = QueryClient::new(node_url)?;
+    let aptos_api_key =
+        env::var("APTOS_API_KEY").expect("APTOS_API_KEY environment variable is required");
+    let query_client = QueryClient::new(node_url, &aptos_api_key)?;
 
     let bridge_contract_address =
         "0x6b891d58da6e4fd7bb2ab229917833c47cb34d8d60cf75e93d717bda43eee387";

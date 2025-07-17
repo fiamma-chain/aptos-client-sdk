@@ -10,6 +10,7 @@ use anyhow::{Context, Result};
 use aptos_sdk::move_types::identifier::Identifier;
 use aptos_sdk::move_types::language_storage::ModuleId;
 use aptos_sdk::rest_client::aptos_api_types::{EntryFunctionId, IdentifierWrapper, MoveModuleId};
+use aptos_sdk::rest_client::{AptosBaseUrl, ClientBuilder};
 use aptos_sdk::transaction_builder::TransactionBuilder;
 use aptos_sdk::{
     rest_client::{aptos_api_types::ViewRequest, Client},
@@ -40,6 +41,7 @@ impl BridgeClient {
     /// Create new Bridge client
     pub async fn new(
         node_url: &str,
+        aptos_api_key: &str,
         private_key_hex: &str,
         bridge_contract_address: &str,
         btc_light_client: &str,
@@ -49,14 +51,18 @@ impl BridgeClient {
 
         let btc_light_client = parse_account_address(btc_light_client)?;
 
-        // Create REST client
-        let rest_client = Client::new(
+        let aptos_base_url = AptosBaseUrl::Custom(
             Url::parse(node_url)
                 .with_context(|| format!("Invalid Aptos node URL: {}", node_url))?,
         );
 
+        // Create REST client
+        let rest_client = ClientBuilder::new(aptos_base_url)
+            .api_key(aptos_api_key)?
+            .build();
+
         // Create query client
-        let query_client = QueryClient::new(node_url)?;
+        let query_client = QueryClient::new(node_url, aptos_api_key)?;
 
         let account = LocalAccount::from_private_key(private_key_hex, 0)
             .context("Invalid private key format")?;

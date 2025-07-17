@@ -6,7 +6,7 @@ use crate::types::{parse_burn_event, parse_mint_event, BridgeEvent};
 use anyhow::{anyhow, Context, Result};
 use aptos_sdk::{
     crypto::HashValue,
-    rest_client::{aptos_api_types::Event, Client, Transaction},
+    rest_client::{aptos_api_types::Event, AptosBaseUrl, Client, ClientBuilder, Transaction},
 };
 use url::Url;
 
@@ -18,10 +18,12 @@ pub struct QueryClient {
 
 impl QueryClient {
     /// Create new query client
-    pub fn new(node_url: &str) -> Result<Self> {
-        let rest_client = Client::new(
+    pub fn new(node_url: &str, aptos_api_key: &str) -> Result<Self> {
+        let rest_client = ClientBuilder::new(AptosBaseUrl::Custom(
             Url::parse(node_url).with_context(|| format!("Invalid node URL: {}", node_url))?,
-        );
+        ))
+        .api_key(aptos_api_key)?
+        .build();
 
         Ok(Self { rest_client })
     }
