@@ -47,6 +47,19 @@ impl QueryClient {
         Ok(response.inner().clone())
     }
 
+    pub async fn get_tx_hash_by_version(&self, version: u64) -> Result<String> {
+        let response = self
+            .rest_client
+            .get_transaction_by_version(version)
+            .await
+            .context("Failed to get aptos transaction by version")?;
+        let tx_info = response
+            .inner()
+            .transaction_info()
+            .context("Aptos transaction not found")?;
+        Ok(tx_info.hash.to_string())
+    }
+
     /// Get bridge events from user transaction hash
     pub async fn get_bridge_events_by_hash(
         &self,
