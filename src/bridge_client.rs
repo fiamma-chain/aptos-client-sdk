@@ -165,9 +165,12 @@ impl BridgeClient {
             .get(0)
             .context("No response from view function")?;
 
-        // Deserialize the u64 result
-        let min_confirmations: u64 =
-            serde_json::from_value(result.clone()).context("Failed to parse min_confirmations")?;
+        // Parse as string then convert to u64
+        let str_val: String = serde_json::from_value(result.clone())
+            .context("Failed to parse min_confirmations response as string")?;
+        let min_confirmations: u64 = str_val
+            .parse()
+            .context("Failed to convert min_confirmations string to u64")?;
 
         Ok(min_confirmations)
     }
@@ -179,7 +182,7 @@ impl BridgeClient {
             function: EntryFunctionId {
                 module: MoveModuleId {
                     address: self.btc_light_client.into(),
-                    name: IdentifierWrapper(Identifier::new("btc_light_client").unwrap()),
+                    name: IdentifierWrapper(Identifier::new("btc_mirror").unwrap()),
                 },
                 name: IdentifierWrapper(Identifier::new("get_latest_block_height").unwrap()),
             },
@@ -200,9 +203,12 @@ impl BridgeClient {
             .get(0)
             .context("No response from view function")?;
 
-        // Deserialize the u64 result
-        let latest_block_height: u64 = serde_json::from_value(result.clone())
-            .context("Failed to parse latest_block_height")?;
+        // Parse as string then convert to u64
+        let str_val: String = serde_json::from_value(result.clone())
+            .context("Failed to parse latest_block_height response as string")?;
+        let latest_block_height: u64 = str_val
+            .parse()
+            .context("Failed to convert latest_block_height string to u64")?;
 
         Ok(latest_block_height)
     }
