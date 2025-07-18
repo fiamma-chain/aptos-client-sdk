@@ -3,7 +3,7 @@
 //! Provides functionality to query Aptos Bridge contract configuration and status.
 
 use crate::types::{parse_burn_event, parse_mint_event, BridgeEvent};
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Result};
 use aptos_sdk::{
     crypto::HashValue,
     rest_client::{aptos_api_types::Event, AptosBaseUrl, Client, ClientBuilder, Transaction},
@@ -20,7 +20,7 @@ impl QueryClient {
     /// Create new query client
     pub fn new(node_url: &str, aptos_api_key: Option<&str>) -> Result<Self> {
         let mut client_builder = ClientBuilder::new(AptosBaseUrl::Custom(
-            Url::parse(node_url).with_context(|| format!("Invalid node URL: {}", node_url))?,
+            Url::parse(node_url).map_err(|e| anyhow!("Invalid node URL '{}': {}", node_url, e))?,
         ));
 
         if let Some(api_key) = aptos_api_key {
@@ -36,13 +36,13 @@ impl QueryClient {
     pub async fn get_transaction_by_hash(&self, tx_hash: &str) -> Result<Transaction> {
         // Parse transaction hash
         let tx_hash = HashValue::from_hex(tx_hash.trim_start_matches("0x"))
-            .with_context(|| format!("Invalid transaction hash: {}", tx_hash))?;
+            .map_err(|e| anyhow!("Invalid transaction hash '{}': {}", tx_hash, e))?;
 
         let response = self
             .rest_client
             .get_transaction_by_hash(tx_hash)
             .await
-            .context("Failed to get transaction from Aptos node")?;
+            .map_err(|e| anyhow!("Failed to get transaction from Aptos node: {}", e))?;
 
         Ok(response.inner().clone())
     }
@@ -52,11 +52,20 @@ impl QueryClient {
             .rest_client
             .get_transaction_by_version(version)
             .await
-            .context("Failed to get aptos transaction by version")?;
-        let tx_info = response
-            .inner()
-            .transaction_info()
-            .context("Aptos transaction not found")?;
+            .map_err(|e| {
+                anyhow!(
+                    "Failed to get aptos transaction by version {}: {}",
+                    version,
+                    e
+                )
+            })?;
+        let tx_info = response.inner().transaction_info().map_err(|e| {
+            anyhow!(
+                "Failed to get transaction info for version {}: {}",
+                version,
+                e
+            )
+        })?;
         Ok(tx_info.hash.to_string())
     }
 

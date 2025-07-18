@@ -4,13 +4,13 @@
 
 use std::str::FromStr;
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Result};
 use aptos_sdk::types::account_address::AccountAddress;
 
 /// Convert hex string to AccountAddress
 pub fn parse_account_address(addr_str: &str) -> Result<AccountAddress> {
     AccountAddress::from_str(addr_str)
-        .with_context(|| format!("Invalid address format: {}", addr_str))
+        .map_err(|e| anyhow!("Invalid address format '{}': {}", addr_str, e))
 }
 
 #[cfg(test)]

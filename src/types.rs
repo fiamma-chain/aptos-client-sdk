@@ -2,7 +2,7 @@
 //!
 //! This module defines all data types required for interacting with Aptos Bridge contracts.
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Result};
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
@@ -54,7 +54,7 @@ impl Peg {
     pub fn serialize_to_args(&self) -> Result<Vec<Vec<u8>>> {
         // Convert address string to AccountAddress
         let to_address = aptos_sdk::types::account_address::AccountAddress::from_str(&self.to)
-            .with_context(|| format!("Invalid address format: {}", self.to))?;
+            .map_err(|e| anyhow!("Invalid address format '{}': {}", self.to, e))?;
 
         // Convert script type to u8
         let script_type_u8 = match self.script_type {
@@ -65,21 +65,27 @@ impl Peg {
 
         // Serialize each parameter according to contract requirements
         let args = vec![
-            bcs::to_bytes(&to_address).context("Failed to serialize to address")?,
-            bcs::to_bytes(&self.value).context("Failed to serialize value")?,
-            bcs::to_bytes(&self.block_num).context("Failed to serialize block_num")?,
+            bcs::to_bytes(&to_address)
+                .map_err(|e| anyhow!("Failed to serialize to address: {}", e))?,
+            bcs::to_bytes(&self.value).map_err(|e| anyhow!("Failed to serialize value: {}", e))?,
+            bcs::to_bytes(&self.block_num)
+                .map_err(|e| anyhow!("Failed to serialize block_num: {}", e))?,
             bcs::to_bytes(&self.inclusion_proof.tx_index)
-                .context("Failed to serialize tx_index")?,
-            bcs::to_bytes(&self.tx_out_ix).context("Failed to serialize tx_out_ix")?,
-            bcs::to_bytes(&script_type_u8).context("Failed to serialize script_type")?,
+                .map_err(|e| anyhow!("Failed to serialize tx_index: {}", e))?,
+            bcs::to_bytes(&self.tx_out_ix)
+                .map_err(|e| anyhow!("Failed to serialize tx_out_ix: {}", e))?,
+            bcs::to_bytes(&script_type_u8)
+                .map_err(|e| anyhow!("Failed to serialize script_type: {}", e))?,
             bcs::to_bytes(&self.inclusion_proof.block_header)
-                .context("Failed to serialize block_header")?,
-            bcs::to_bytes(&self.inclusion_proof.tx_id).context("Failed to serialize tx_id")?,
+                .map_err(|e| anyhow!("Failed to serialize block_header: {}", e))?,
+            bcs::to_bytes(&self.inclusion_proof.tx_id)
+                .map_err(|e| anyhow!("Failed to serialize tx_id: {}", e))?,
             bcs::to_bytes(&self.inclusion_proof.merkle_proof)
-                .context("Failed to serialize tx_merkle_proof")?,
-            bcs::to_bytes(&self.inclusion_proof.raw_tx).context("Failed to serialize raw_tx")?,
+                .map_err(|e| anyhow!("Failed to serialize tx_merkle_proof: {}", e))?,
+            bcs::to_bytes(&self.inclusion_proof.raw_tx)
+                .map_err(|e| anyhow!("Failed to serialize raw_tx: {}", e))?,
             bcs::to_bytes(&self.dest_script_hash)
-                .context("Failed to serialize dest_script_hash")?,
+                .map_err(|e| anyhow!("Failed to serialize dest_script_hash: {}", e))?,
         ];
 
         Ok(args)
@@ -211,15 +217,15 @@ pub enum BridgeEvent {
 
 /// Parse mint event using serde_json
 pub fn parse_mint_event(data: &serde_json::Value) -> Result<MintEvent> {
-    let raw_event: MintEventRaw =
-        serde_json::from_value(data.clone()).context("Failed to parse mint event data")?;
+    let raw_event: MintEventRaw = serde_json::from_value(data.clone())
+        .map_err(|e| anyhow!("Failed to parse mint event data: {}", e))?;
     Ok(raw_event.into())
 }
 
 /// Parse burn event using serde_json
 pub fn parse_burn_event(data: &serde_json::Value) -> Result<BurnEvent> {
-    let raw_event: BurnEventRaw =
-        serde_json::from_value(data.clone()).context("Failed to parse burn event data")?;
+    let raw_event: BurnEventRaw = serde_json::from_value(data.clone())
+        .map_err(|e| anyhow!("Failed to parse burn event data: {}", e))?;
     Ok(raw_event.into())
 }
 

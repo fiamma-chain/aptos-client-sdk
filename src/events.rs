@@ -5,7 +5,7 @@
 use crate::types::{parse_burn_event, parse_mint_event, BurnEventRaw, MintEventRaw};
 use crate::{BridgeEvent, BurnEvent, MintEvent};
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -115,10 +115,16 @@ impl EventMonitor {
             .json(&request)
             .send()
             .await
-            .context("Failed to send GraphQL request")?
+            .map_err(|e| {
+                anyhow!(
+                    "Failed to send GraphQL request to {}: {}",
+                    self.graphql_url,
+                    e
+                )
+            })?
             .json::<GraphQLResponse>()
             .await
-            .context("Failed to parse GraphQL response")?;
+            .map_err(|e| anyhow!("Failed to parse GraphQL response: {}", e))?;
 
         if let Some(errors) = response.errors {
             return Err(anyhow::anyhow!("GraphQL errors: {:?}", errors));
@@ -155,7 +161,6 @@ impl EventMonitor {
     async fn create_mint_event(&self, raw: MintEventRaw) -> Result<BridgeEvent> {
         let mut event = parse_mint_event(&serde_json::to_value(&raw)?)?;
 
-        // 尝试获取 transaction hash，如果有 version 的话
         if let Some(version) = event.version {
             match self.query_client.get_tx_hash_by_version(version).await {
                 Ok(tx_hash) => {

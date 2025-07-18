@@ -6,7 +6,7 @@ use crate::types::{constants::*, Peg};
 use crate::utils::parse_account_address;
 use crate::QueryClient;
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Result};
 use aptos_sdk::move_types::identifier::Identifier;
 use aptos_sdk::move_types::language_storage::ModuleId;
 use aptos_sdk::rest_client::aptos_api_types::{EntryFunctionId, IdentifierWrapper, MoveModuleId};
@@ -53,7 +53,7 @@ impl BridgeClient {
 
         let aptos_base_url = AptosBaseUrl::Custom(
             Url::parse(node_url)
-                .with_context(|| format!("Invalid Aptos node URL: {}", node_url))?,
+                .map_err(|e| anyhow!("Invalid Aptos node URL '{}': {}", node_url, e))?,
         );
 
         // Create REST client
@@ -66,8 +66,13 @@ impl BridgeClient {
         // Create query client
         let query_client = QueryClient::new(node_url, aptos_api_key)?;
 
-        let account = LocalAccount::from_private_key(private_key_hex, 0)
-            .context("Invalid private key format")?;
+        let account = LocalAccount::from_private_key(private_key_hex, 0).map_err(|e| {
+            anyhow!(
+                "Invalid aptos private key format '{}': {}",
+                private_key_hex,
+                e
+            )
+        })?;
 
         Ok(Self {
             rest_client,
@@ -112,10 +117,12 @@ impl BridgeClient {
     ) -> Result<String> {
         // Serialize parameters
         let args = vec![
-            bcs::to_bytes(&btc_address).context("Failed to serialize BTC address")?,
-            bcs::to_bytes(&fee_rate).context("Failed to serialize fee rate")?,
-            bcs::to_bytes(&amount).context("Failed to serialize amount")?,
-            bcs::to_bytes(&operator_id).context("Failed to serialize operator ID")?,
+            bcs::to_bytes(&btc_address)
+                .map_err(|e| anyhow!("Failed to serialize BTC address: {}", e))?,
+            bcs::to_bytes(&fee_rate).map_err(|e| anyhow!("Failed to serialize fee rate: {}", e))?,
+            bcs::to_bytes(&amount).map_err(|e| anyhow!("Failed to serialize amount: {}", e))?,
+            bcs::to_bytes(&operator_id)
+                .map_err(|e| anyhow!("Failed to serialize operator ID: {}", e))?,
         ];
 
         // Create Entry Function
@@ -157,20 +164,24 @@ impl BridgeClient {
             .rest_client
             .view(&view_request, None)
             .await
-            .context("Failed to call min_confirmations view function")?;
+            .map_err(|e| anyhow!("Failed to call min_confirmations view function: {}", e))?;
 
         // Parse the response
         let result = response
             .inner()
             .get(0)
-            .context("No response from view function")?;
+            .ok_or_else(|| anyhow!("No response from min_confirmations view function"))?;
 
         // Parse as string then convert to u64
-        let str_val: String = serde_json::from_value(result.clone())
-            .context("Failed to parse min_confirmations response as string")?;
+        let str_val: String = serde_json::from_value(result.clone()).map_err(|e| {
+            anyhow!(
+                "Failed to parse min_confirmations response as string: {}",
+                e
+            )
+        })?;
         let min_confirmations: u64 = str_val
             .parse()
-            .context("Failed to convert min_confirmations string to u64")?;
+            .map_err(|e| anyhow!("Failed to convert min_confirmations string to u64: {}", e))?;
 
         Ok(min_confirmations)
     }
@@ -195,20 +206,29 @@ impl BridgeClient {
             .rest_client
             .view(&view_request, None)
             .await
-            .context("Failed to call get_latest_block_height view function")?;
+            .map_err(|e| {
+                anyhow!(
+                    "Failed to call get_latest_block_height view function: {}",
+                    e
+                )
+            })?;
 
         // Parse the response
         let result = response
             .inner()
             .get(0)
-            .context("No response from view function")?;
+            .ok_or_else(|| anyhow!("No response from get_latest_block_height view function"))?;
 
         // Parse as string then convert to u64
-        let str_val: String = serde_json::from_value(result.clone())
-            .context("Failed to parse latest_block_height response as string")?;
+        let str_val: String = serde_json::from_value(result.clone()).map_err(|e| {
+            anyhow!(
+                "Failed to parse latest_block_height response as string: {}",
+                e
+            )
+        })?;
         let latest_block_height: u64 = str_val
             .parse()
-            .context("Failed to convert latest_block_height string to u64")?;
+            .map_err(|e| anyhow!("Failed to convert latest_block_height string to u64: {}", e))?;
 
         Ok(latest_block_height)
     }
@@ -219,7 +239,7 @@ impl BridgeClient {
             .rest_client
             .get_index()
             .await
-            .context("Failed to get chain ID from Aptos node")?
+            .map_err(|e| anyhow!("Failed to get chain ID from Aptos node: {}", e))?
             .inner()
             .chain_id;
 
@@ -227,7 +247,7 @@ impl BridgeClient {
             .rest_client
             .get_account_sequence_number(self.account.address())
             .await
-            .context("Failed to get sequence number from Aptos node")?;
+            .map_err(|e| anyhow!("Failed to get sequence number from Aptos node: {}", e))?;
 
         self.account
             .set_sequence_number(sequence_number.inner().clone());
@@ -255,14 +275,13 @@ impl BridgeClient {
             .rest_client
             .submit(&signed_transaction)
             .await
-            .context("Failed to submit transaction to Aptos node")?;
+            .map_err(|e| anyhow!("Failed to submit transaction to Aptos node: {}", e))?;
 
         Ok(response.inner().hash.to_string())
     }
 
     pub fn validate_aptos_address(address: &str) -> Result<()> {
-        parse_account_address(address).map(|_| ())?;
-        Ok(())
+        parse_account_address(address).map(|_| ())
     }
 }
 
