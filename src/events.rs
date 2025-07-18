@@ -39,25 +39,31 @@ pub trait EventHandler: Send + Sync {
 /// Event monitor
 pub struct EventMonitor {
     graphql_url: String,
-    api_key: String,
+    graphql_api_key: String,
     handler: Box<dyn EventHandler>,
     last_processed_version: u64,
+    query_client: crate::QueryClient,
 }
 
 impl EventMonitor {
     /// Create new event monitor
     pub fn new(
         graphql_url: &str,
-        api_key: &str,
+        graphql_api_key: &str,
+        node_url: &str,
+        aptos_api_key: Option<&str>,
         handler: Box<dyn EventHandler>,
         last_processed_version: u64,
-    ) -> Self {
-        Self {
+    ) -> Result<Self> {
+        let query_client = crate::QueryClient::new(node_url, aptos_api_key)?;
+
+        Ok(Self {
             graphql_url: graphql_url.to_string(),
-            api_key: api_key.to_string(),
+            graphql_api_key: graphql_api_key.to_string(),
             handler,
             last_processed_version,
-        }
+            query_client,
+        })
     }
 
     /// Process events from given start version
@@ -72,8 +78,8 @@ impl EventMonitor {
         let data = self.query_graphql(start_version).await?;
 
         let mut events = Vec::new();
-        events.extend(self.process_mint_events(data.bridge_mint_events)?);
-        events.extend(self.process_burn_events(data.bridge_burn_events)?);
+        events.extend(self.process_mint_events(data.bridge_mint_events).await?);
+        events.extend(self.process_burn_events(data.bridge_burn_events).await?);
 
         // Sort by version
         events.sort_by_key(|event| match event {
@@ -105,7 +111,7 @@ impl EventMonitor {
 
         let response = reqwest::Client::new()
             .post(&self.graphql_url)
-            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("Authorization", format!("Bearer {}", self.graphql_api_key))
             .json(&request)
             .send()
             .await
@@ -126,30 +132,65 @@ impl EventMonitor {
     }
 
     /// Process mint events
-    fn process_mint_events(&self, raw_events: Vec<MintEventRaw>) -> Result<Vec<BridgeEvent>> {
-        raw_events
-            .into_iter()
-            .map(|raw| self.create_mint_event(raw))
-            .collect()
+    async fn process_mint_events(&self, raw_events: Vec<MintEventRaw>) -> Result<Vec<BridgeEvent>> {
+        let mut events = Vec::new();
+        for raw in raw_events {
+            let event = self.create_mint_event(raw).await?;
+            events.push(event);
+        }
+        Ok(events)
     }
 
     /// Process burn events
-    fn process_burn_events(&self, raw_events: Vec<BurnEventRaw>) -> Result<Vec<BridgeEvent>> {
-        raw_events
-            .into_iter()
-            .map(|raw| self.create_burn_event(raw))
-            .collect()
+    async fn process_burn_events(&self, raw_events: Vec<BurnEventRaw>) -> Result<Vec<BridgeEvent>> {
+        let mut events = Vec::new();
+        for raw in raw_events {
+            let event = self.create_burn_event(raw).await?;
+            events.push(event);
+        }
+        Ok(events)
     }
 
     /// Create mint event from raw data
-    fn create_mint_event(&self, raw: MintEventRaw) -> Result<BridgeEvent> {
-        let event = parse_mint_event(&serde_json::to_value(&raw)?)?;
+    async fn create_mint_event(&self, raw: MintEventRaw) -> Result<BridgeEvent> {
+        let mut event = parse_mint_event(&serde_json::to_value(&raw)?)?;
+
+        // 尝试获取 transaction hash，如果有 version 的话
+        if let Some(version) = event.version {
+            match self.query_client.get_tx_hash_by_version(version).await {
+                Ok(tx_hash) => {
+                    event.transaction_hash = Some(tx_hash);
+                }
+                Err(e) => {
+                    eprintln!(
+                        "Warning: Failed to get transaction hash for version {}: {}",
+                        version, e
+                    );
+                }
+            }
+        }
+
         Ok(BridgeEvent::Mint(event))
     }
 
     /// Create burn event from raw data
-    fn create_burn_event(&self, raw: BurnEventRaw) -> Result<BridgeEvent> {
-        let event = parse_burn_event(&serde_json::to_value(&raw)?)?;
+    async fn create_burn_event(&self, raw: BurnEventRaw) -> Result<BridgeEvent> {
+        let mut event = parse_burn_event(&serde_json::to_value(&raw)?)?;
+
+        if let Some(version) = event.version {
+            match self.query_client.get_tx_hash_by_version(version).await {
+                Ok(tx_hash) => {
+                    event.transaction_hash = Some(tx_hash);
+                }
+                Err(e) => {
+                    eprintln!(
+                        "Warning: Failed to get transaction hash for version {}: {}",
+                        version, e
+                    );
+                }
+            }
+        }
+
         Ok(BridgeEvent::Burn(event))
     }
 

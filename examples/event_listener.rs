@@ -13,13 +13,14 @@ struct CustomEventHandler;
 impl EventHandler for CustomEventHandler {
     async fn handle_mint(&self, event: MintEvent) -> Result<()> {
         let event_data = format!(
-            "🟢 Mint Event - To: {}, Amount: {}, BTC Block: {}, BTC Tx: {}, Version: {}, Timestamp: {}",
+            "🟢 Mint Event - To: {}, Amount: {}, BTC Block: {}, BTC Tx: {}, Version: {}, Timestamp: {}, Transaction Hash: {}",
             event.to_address,
             event.amount,
             event.btc_block_num,
             event.btc_tx_id,
             event.version.unwrap_or(0),
             event.timestamp.unwrap_or(0),
+            event.transaction_hash.unwrap_or("N/A".to_string()),
         );
 
         println!("{}", event_data);
@@ -29,7 +30,7 @@ impl EventHandler for CustomEventHandler {
 
     async fn handle_burn(&self, event: BurnEvent) -> Result<()> {
         let event_data = format!(
-            "🔴 Burn Event - From: {}, To: {}, Amount: {}, FeeRate: {}, Operator: {}, Version: {}, Timestamp: {}",
+            "🔴 Burn Event - From: {}, To: {}, Amount: {}, FeeRate: {}, Operator: {}, Version: {}, Timestamp: {}, Transaction Hash: {}",
             event.from_address,
             event.btc_address,
             event.amount,
@@ -37,6 +38,7 @@ impl EventHandler for CustomEventHandler {
             event.operator_id,
             event.version.unwrap_or(0),
             event.timestamp.unwrap_or(0),
+            event.transaction_hash.unwrap_or("N/A".to_string()),
         );
 
         println!("{}", event_data);
@@ -56,17 +58,23 @@ async fn main() -> Result<()> {
     let start_version = 0;
     let poll_interval = 10; // seconds
 
-    // Get API key from environment variable
-    let api_key =
+    // Get API keys from environment variables
+    let graphql_api_key =
         env::var("GRAPHQL_API_KEY").expect("GRAPHQL_API_KEY environment variable is required");
+    let aptos_api_key = env::var("APTOS_API_KEY").ok();
+
+    // Aptos node URL
+    let node_url = "https://fullnode.testnet.aptoslabs.com/v1";
 
     // Create event monitor with API key
     let monitor = EventMonitor::new(
         graphql_url,
-        &api_key,
+        &graphql_api_key,
+        node_url,
+        aptos_api_key.as_deref(),
         Box::new(CustomEventHandler),
         start_version,
-    );
+    )?;
     loop {
         match monitor.process().await {
             Ok(_) => {

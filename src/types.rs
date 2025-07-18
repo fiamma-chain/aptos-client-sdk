@@ -101,6 +101,8 @@ pub struct MintEvent {
     pub timestamp: Option<u64>,
     /// Version
     pub version: Option<u64>,
+    /// Transaction hash
+    pub transaction_hash: Option<String>,
 }
 
 /// Burn event data
@@ -120,6 +122,8 @@ pub struct BurnEvent {
     pub timestamp: Option<u64>,
     /// Version
     pub version: Option<u64>,
+    /// Transaction hash
+    pub transaction_hash: Option<String>,
 }
 
 /// Raw mint event data (supports both GraphQL and transaction event sources)
@@ -139,6 +143,9 @@ pub(crate) struct MintEventRaw {
     /// Optional version (present in GraphQL, may be absent in transaction events)
     #[serde(default)]
     pub version: Option<String>,
+    /// Optional transaction hash (present in transaction events, may be absent in GraphQL)
+    #[serde(default)]
+    pub transaction_hash: Option<String>,
 }
 
 /// Raw burn event data (supports both GraphQL and transaction event sources)
@@ -159,6 +166,9 @@ pub(crate) struct BurnEventRaw {
     /// Optional version (present in GraphQL, may be absent in transaction events)
     #[serde(default)]
     pub version: Option<String>,
+    /// Optional transaction hash (present in transaction events, may be absent in GraphQL)
+    #[serde(default)]
+    pub transaction_hash: Option<String>,
 }
 
 impl From<MintEventRaw> for MintEvent {
@@ -170,6 +180,7 @@ impl From<MintEventRaw> for MintEvent {
             btc_block_num: raw.btc_block_num.parse().unwrap_or(0),
             timestamp: raw.timestamp.and_then(|t| parse_timestamp(&t)),
             version: raw.version.and_then(|v| v.parse().ok()),
+            transaction_hash: raw.transaction_hash,
         }
     }
 }
@@ -184,6 +195,7 @@ impl From<BurnEventRaw> for BurnEvent {
             operator_id: raw.operator_id.parse().unwrap_or(0),
             timestamp: raw.timestamp.and_then(|t| parse_timestamp(&t)),
             version: raw.version.and_then(|v| v.parse().ok()),
+            transaction_hash: raw.transaction_hash,
         }
     }
 }
