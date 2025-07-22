@@ -60,7 +60,7 @@ async fn main() -> Result<()> {
 
     // Example 3: Withdraw through LP
     let withdraw_params = WithdrawByLPParams {
-        withdraw_id: 12350,
+        withdraw_id: 12351,
         btc_address: "bcrt1phcnl4zcl2fu047pv4wx6y058v8u0n02at6lthvm7pcf2wrvjm5tqatn90k".to_string(),
         receiver_script_hash: hex::decode("a914b7fcce0647b5e26b4a14b6b3b6f8b5e8e8e8e8e8e887")?,
         receive_min_amount: 450000, // 0.0045 BTC minimum
@@ -83,7 +83,7 @@ async fn main() -> Result<()> {
     }
 
     // Example 4: Get LP withdraw information
-    match client.get_lp_withdraw(12350).await {
+    match client.get_lp_withdraw(12351).await {
         Ok(withdraw_info) => {
             println!("Withdraw info:");
             println!("  ID: {}", withdraw_info.id);
@@ -104,7 +104,7 @@ async fn main() -> Result<()> {
     // Example 5: Claim LP withdraw (owner only)
     // This would typically be called by the bridge operator after confirming the BTC transaction
     let claim_params = ClaimLPWithdrawParams {
-        withdraw_id: 12350,
+        withdraw_id: 12351,
         block_num: 800000,
         tx_out_ix: 0,
         amount_sats: 460000, // Amount actually received (after fees)

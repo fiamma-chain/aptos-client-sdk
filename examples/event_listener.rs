@@ -74,7 +74,7 @@ async fn main() -> Result<()> {
 
     // Use your custom GraphQL index URL
     let graphql_url =
-        "https://api.testnet.aptoslabs.com/nocode/v1/api/cmd66memj007os601224cvlmd/v1/graphql";
+        "https://api.testnet.aptoslabs.com/nocode/v1/api/cmde2pbrh0011s601ew8vlbgd/v1/graphql";
     let start_version = 0;
     let poll_interval = 10; // seconds
 
