@@ -305,19 +305,36 @@ pub fn parse_withdraw_by_lp_event(data: &serde_json::Value) -> Result<WithdrawBy
     Ok(raw_event.into())
 }
 
-/// LP Status structure
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LPStatus {
-    pub value: u8,
+/// LP Status enumeration (matches Move contract LPStatus enum)
+/// 0 = UNREGISTERED, 1 = ACTIVE, 2 = SUSPENDED, 3 = TERMINATED
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[repr(u8)]
+#[serde(tag = "__variant__")]
+pub enum LPStatus {
+    UNREGISTERED = 0,
+    ACTIVE = 1,
+    SUSPENDED = 2,
+    TERMINATED = 3,
 }
 
 impl LPStatus {
     /// Parse LP status data from view function response
     pub fn from_view_response(result: &serde_json::Value) -> Result<Self> {
-        // Parse directly as LPStatus since the JSON contains numeric value
+        // Now serde handles the __variant__ format automatically
         let status = serde_json::from_value::<LPStatus>(result.clone())
             .map_err(|e| anyhow!("Failed to parse get_lp_status response: {}", e))?;
         Ok(status)
+    }
+
+    /// Convert variant name string to LPStatus enum
+    pub fn from_variant_name(variant: &str) -> Result<Self> {
+        match variant {
+            "UNREGISTERED" => Ok(LPStatus::UNREGISTERED),
+            "ACTIVE" => Ok(LPStatus::ACTIVE),
+            "SUSPENDED" => Ok(LPStatus::SUSPENDED),
+            "TERMINATED" => Ok(LPStatus::TERMINATED),
+            _ => Err(anyhow!("Invalid LP status variant: '{}'. Valid variants are: UNREGISTERED, ACTIVE, SUSPENDED, TERMINATED", variant)),
+        }
     }
 }
 
