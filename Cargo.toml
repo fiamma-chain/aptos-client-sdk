@@ -19,6 +19,10 @@ path = "examples/event_listener.rs"
 name = "query"
 path = "examples/query.rs"
 
+[[example]]
+name = "lp_operations"
+path = "examples/lp_operations.rs"
+
 
 [dependencies]
 tokio = { version = "1.46.1", features = ["full"] }

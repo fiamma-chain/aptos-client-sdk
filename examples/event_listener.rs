@@ -3,7 +3,7 @@
 //! This example shows how to use the Aptos Bridge SDK to listen to bridge events.
 
 use anyhow::Result;
-use aptos_client_sdk::{BurnEvent, EventHandler, EventMonitor, MintEvent};
+use aptos_client_sdk::{BurnEvent, EventHandler, EventMonitor, MintEvent, WithdrawByLPEvent};
 use async_trait::async_trait;
 use std::env;
 
@@ -36,6 +36,26 @@ impl EventHandler for CustomEventHandler {
             event.amount,
             event.fee_rate,
             event.operator_id,
+            event.version.unwrap_or(0),
+            event.timestamp.unwrap_or(0),
+            event.transaction_hash.unwrap_or("N/A".to_string()),
+        );
+
+        println!("{}", event_data);
+
+        Ok(())
+    }
+
+    async fn handle_withdraw_by_lp(&self, event: WithdrawByLPEvent) -> Result<()> {
+        let event_data = format!(
+            "🟡 WithdrawByLP Event - From: {}, Withdraw ID: {}, Amount: {}, BTC Address: {}, LP ID: {}, Fee Rate: {}, Min Receive: {}, Version: {}, Timestamp: {}, Transaction Hash: {}",
+            event.from_address,
+            event.withdraw_id,
+            event.amount,
+            event.btc_address,
+            event.lp_id,
+            event.fee_rate,
+            event.receive_min_amount,
             event.version.unwrap_or(0),
             event.timestamp.unwrap_or(0),
             event.transaction_hash.unwrap_or("N/A".to_string()),

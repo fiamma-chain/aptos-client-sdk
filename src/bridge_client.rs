@@ -2,7 +2,10 @@
 //!
 //! Provides core functionality for interacting with Aptos Bridge contracts.
 
-use crate::types::{constants::*, Peg};
+use crate::types::{
+    constants::*, ClaimLPWithdrawParams, LPStatus, LPWithdraw, Peg, RegisterLPParams,
+    WithdrawByLPParams,
+};
 use crate::utils::parse_account_address;
 use crate::QueryClient;
 
@@ -144,6 +147,78 @@ impl BridgeClient {
         Ok(tx_hash)
     }
 
+    /// Withdraw tokens through LP mode
+    pub async fn withdraw_by_lp(&self, params: WithdrawByLPParams) -> Result<String> {
+        // Serialize parameters using the struct method
+        let args = params.serialize_to_args()?;
+
+        // Create Entry Function
+        let entry_function = EntryFunction::new(
+            ModuleId::new(
+                self.bridge_contract_address,
+                Identifier::new("bridge").unwrap(),
+            ),
+            Identifier::new("withdraw_by_lp").unwrap(),
+            vec![], // No type parameters
+            args,
+        );
+
+        // Execute transaction
+        let tx_hash = self
+            .execute_transaction(TransactionPayload::EntryFunction(entry_function))
+            .await?;
+
+        Ok(tx_hash)
+    }
+
+    /// Claim LP withdrawal (single withdrawal)
+    pub async fn claim_lp_withdraw(&self, params: ClaimLPWithdrawParams) -> Result<String> {
+        // Serialize parameters using the struct method
+        let args = params.serialize_to_args()?;
+
+        // Create Entry Function
+        let entry_function = EntryFunction::new(
+            ModuleId::new(
+                self.bridge_contract_address,
+                Identifier::new("bridge").unwrap(),
+            ),
+            Identifier::new("claim_lp_withdraw").unwrap(),
+            vec![], // No type parameters
+            args,
+        );
+
+        // Execute transaction
+        let tx_hash = self
+            .execute_transaction(TransactionPayload::EntryFunction(entry_function))
+            .await?;
+
+        Ok(tx_hash)
+    }
+
+    /// Register a new LP
+    pub async fn register_lp(&self, params: RegisterLPParams) -> Result<String> {
+        // Serialize parameters using the struct method
+        let args = params.serialize_to_args()?;
+
+        // Create Entry Function
+        let entry_function = EntryFunction::new(
+            ModuleId::new(
+                self.bridge_contract_address,
+                Identifier::new("lp_manager").unwrap(),
+            ),
+            Identifier::new("register_lp").unwrap(),
+            vec![], // No type parameters
+            args,
+        );
+
+        // Execute transaction
+        let tx_hash = self
+            .execute_transaction(TransactionPayload::EntryFunction(entry_function))
+            .await?;
+
+        Ok(tx_hash)
+    }
+
     /// Get minimum confirmations required for BTC transactions
     pub async fn get_min_confirmations(&self) -> Result<u64> {
         // Construct the view function call
@@ -231,6 +306,70 @@ impl BridgeClient {
             .map_err(|e| anyhow!("Failed to convert latest_block_height string to u64: {}", e))?;
 
         Ok(latest_block_height)
+    }
+
+    /// Get LP withdraw information
+    pub async fn get_lp_withdraw(&self, withdraw_id: u64) -> Result<LPWithdraw> {
+        // Construct the view function call
+        let view_request = ViewRequest {
+            function: EntryFunctionId {
+                module: MoveModuleId {
+                    address: self.bridge_contract_address.into(),
+                    name: IdentifierWrapper(Identifier::new("bridge").unwrap()),
+                },
+                name: IdentifierWrapper(Identifier::new("get_lp_withdraw").unwrap()),
+            },
+            type_arguments: vec![],
+            arguments: vec![serde_json::to_value(&withdraw_id.to_string())?],
+        };
+
+        // Call the view function
+        let response = self
+            .rest_client
+            .view(&view_request, None)
+            .await
+            .map_err(|e| anyhow!("Failed to call get_lp_withdraw view function: {}", e))?;
+
+        // Parse the response
+        let result = response
+            .inner()
+            .get(0)
+            .ok_or_else(|| anyhow!("No response from get_lp_withdraw view function"))?;
+
+        // Parse LP withdraw data using the struct method
+        LPWithdraw::from_view_response(result)
+    }
+
+    /// Get LP status
+    pub async fn get_lp_status(&self, lp_id: u64) -> Result<LPStatus> {
+        // Construct the view function call
+        let view_request = ViewRequest {
+            function: EntryFunctionId {
+                module: MoveModuleId {
+                    address: self.bridge_contract_address.into(),
+                    name: IdentifierWrapper(Identifier::new("lp_manager").unwrap()),
+                },
+                name: IdentifierWrapper(Identifier::new("get_lp_status").unwrap()),
+            },
+            type_arguments: vec![],
+            arguments: vec![serde_json::to_value(&lp_id.to_string())?],
+        };
+
+        // Call the view function
+        let response = self
+            .rest_client
+            .view(&view_request, None)
+            .await
+            .map_err(|e| anyhow!("Failed to call get_lp_status view function: {}", e))?;
+
+        // Parse the response
+        let result = response
+            .inner()
+            .get(0)
+            .ok_or_else(|| anyhow!("No response from get_lp_status view function"))?;
+
+        // Parse LP status data using the struct method
+        LPStatus::from_view_response(result)
     }
 
     /// Generic method for executing transactions

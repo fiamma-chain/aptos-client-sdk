@@ -10,4 +10,7 @@ pub use events::{EventHandler, EventMonitor};
 pub use query_client::QueryClient;
 
 // Re-export main data types (excluding error types)
-pub use types::{BridgeEvent, BurnEvent, MintEvent, Peg, ScriptType, TxProof};
+pub use types::{
+    BridgeEvent, BurnEvent, ClaimLPWithdrawParams, LPInfo, LPStatus, LPWithdraw, MintEvent, Peg,
+    RegisterLPParams, ScriptType, TxProof, WithdrawByLPEvent, WithdrawByLPParams,
+};

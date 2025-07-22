@@ -2,7 +2,10 @@
 //!
 //! Provides functionality to listen to Aptos Bridge contract events.
 
-use crate::types::{parse_burn_event, parse_mint_event, BurnEventRaw, MintEventRaw};
+use crate::types::{
+    parse_burn_event, parse_mint_event, parse_withdraw_by_lp_event, BurnEventRaw, MintEventRaw,
+    WithdrawByLPEvent, WithdrawByLPEventRaw,
+};
 use crate::{BridgeEvent, BurnEvent, MintEvent};
 
 use anyhow::{anyhow, Result};
@@ -27,6 +30,7 @@ struct GraphQLResponse {
 struct GraphQLData {
     bridge_mint_events: Vec<MintEventRaw>,
     bridge_burn_events: Vec<BurnEventRaw>,
+    bridge_withdraw_by_lp_events: Vec<WithdrawByLPEventRaw>,
 }
 
 /// Event handler trait
@@ -34,6 +38,7 @@ struct GraphQLData {
 pub trait EventHandler: Send + Sync {
     async fn handle_mint(&self, event: MintEvent) -> Result<()>;
     async fn handle_burn(&self, event: BurnEvent) -> Result<()>;
+    async fn handle_withdraw_by_lp(&self, event: WithdrawByLPEvent) -> Result<()>;
 }
 
 /// Event monitor
@@ -80,11 +85,16 @@ impl EventMonitor {
         let mut events = Vec::new();
         events.extend(self.process_mint_events(data.bridge_mint_events).await?);
         events.extend(self.process_burn_events(data.bridge_burn_events).await?);
+        events.extend(
+            self.process_withdraw_by_lp_events(data.bridge_withdraw_by_lp_events)
+                .await?,
+        );
 
         // Sort by version
         events.sort_by_key(|event| match event {
             BridgeEvent::Mint(e) => e.version.unwrap_or(0),
             BridgeEvent::Burn(e) => e.version.unwrap_or(0),
+            BridgeEvent::WithdrawByLP(e) => e.version.unwrap_or(0),
         });
 
         Ok(events)
@@ -99,6 +109,9 @@ impl EventMonitor {
                 }
                 bridge_mint_events(where: {version: {_gt: $startVersion}}, order_by: {version: asc}) {
                     amount, btc_block_num, btc_tx_id, timestamp, to_address, version
+                }
+                bridge_withdraw_by_lp_events(where: {version: {_gt: $startVersion}}, order_by: {version: asc}) {
+                    amount, btc_address, fee_rate, from_address, lp_id, receive_min_amount, timestamp, version, withdraw_id
                 }
             }
         "#;
@@ -157,6 +170,19 @@ impl EventMonitor {
         Ok(events)
     }
 
+    /// Process WithdrawByLP events
+    async fn process_withdraw_by_lp_events(
+        &self,
+        raw_events: Vec<WithdrawByLPEventRaw>,
+    ) -> Result<Vec<BridgeEvent>> {
+        let mut events = Vec::new();
+        for raw in raw_events {
+            let event = self.create_withdraw_by_lp_event(raw).await?;
+            events.push(event);
+        }
+        Ok(events)
+    }
+
     /// Create mint event from raw data
     async fn create_mint_event(&self, raw: MintEventRaw) -> Result<BridgeEvent> {
         let mut event = parse_mint_event(&serde_json::to_value(&raw)?)?;
@@ -199,6 +225,27 @@ impl EventMonitor {
         Ok(BridgeEvent::Burn(event))
     }
 
+    /// Create WithdrawByLP event from raw data
+    async fn create_withdraw_by_lp_event(&self, raw: WithdrawByLPEventRaw) -> Result<BridgeEvent> {
+        let mut event = parse_withdraw_by_lp_event(&serde_json::to_value(&raw)?)?;
+
+        if let Some(version) = event.version {
+            match self.query_client.get_tx_hash_by_version(version).await {
+                Ok(tx_hash) => {
+                    event.transaction_hash = Some(tx_hash);
+                }
+                Err(e) => {
+                    eprintln!(
+                        "Warning: Failed to get transaction hash for version {}: {}",
+                        version, e
+                    );
+                }
+            }
+        }
+
+        Ok(BridgeEvent::WithdrawByLP(event))
+    }
+
     /// Handle all events
     async fn handle_events(&self, events: &[BridgeEvent]) -> Result<()> {
         for event in events {
@@ -208,6 +255,11 @@ impl EventMonitor {
                 }
                 BridgeEvent::Burn(burn_event) => {
                     self.handler.handle_burn(burn_event.clone()).await?
+                }
+                BridgeEvent::WithdrawByLP(withdraw_by_lp_event) => {
+                    self.handler
+                        .handle_withdraw_by_lp(withdraw_by_lp_event.clone())
+                        .await?
                 }
             }
         }

@@ -16,7 +16,7 @@ async fn main() -> Result<()> {
 
     let aptos_api_key = env::var("APTOS_API_KEY").ok();
     let bridge_contract_address =
-        "0xc70be23fa7b086eb766776ca78e0d0633b5c0d1a58fa1b6e1f2207f481452e1c";
+        "0x22aff2ba274c94b5a8687ecde94d68d2123e66381f9b51e97c69d84add86f0b8";
     let btc_light_client = "0x749e2800973809a39eb72ed6e38f154151cef1213b2e72e031ad86875bbc051a";
 
     let bridge_client = BridgeClient::new(
