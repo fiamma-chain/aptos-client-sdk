@@ -305,116 +305,19 @@ pub fn parse_withdraw_by_lp_event(data: &serde_json::Value) -> Result<WithdrawBy
     Ok(raw_event.into())
 }
 
-/// Parse LP withdraw data using serde_json
-pub fn parse_lp_withdraw(data: &serde_json::Value) -> Result<LPWithdraw> {
-    let raw_data: LPWithdrawRaw = serde_json::from_value(data.clone())
-        .map_err(|e| anyhow!("Failed to parse LP withdraw data: {}", e))?;
-    Ok(raw_data.into())
-}
-
 /// LP Status structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LPStatus {
     pub value: u8,
 }
 
-/// LP Status raw structure
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LPStatusRaw {
-    #[serde(deserialize_with = "deserialize_number_as_string")]
-    pub value: String,
-}
-
-/// Custom deserializer to handle both numeric and string values
-fn deserialize_number_as_string<'de, D>(deserializer: D) -> Result<String, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    use serde::de::{self, Visitor};
-    use std::fmt;
-
-    struct StringOrNumberVisitor;
-
-    impl<'de> Visitor<'de> for StringOrNumberVisitor {
-        type Value = String;
-
-        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-            formatter.write_str("a string or number")
-        }
-
-        fn visit_str<E>(self, value: &str) -> Result<String, E>
-        where
-            E: de::Error,
-        {
-            Ok(value.to_string())
-        }
-
-        fn visit_u64<E>(self, value: u64) -> Result<String, E>
-        where
-            E: de::Error,
-        {
-            Ok(value.to_string())
-        }
-
-        fn visit_i64<E>(self, value: i64) -> Result<String, E>
-        where
-            E: de::Error,
-        {
-            Ok(value.to_string())
-        }
-
-        fn visit_f64<E>(self, value: f64) -> Result<String, E>
-        where
-            E: de::Error,
-        {
-            Ok(value.to_string())
-        }
-    }
-
-    deserializer.deserialize_any(StringOrNumberVisitor)
-}
-
-impl From<LPStatusRaw> for LPStatus {
-    fn from(raw: LPStatusRaw) -> Self {
-        Self {
-            value: raw.value.parse().unwrap_or(0),
-        }
-    }
-}
-
 impl LPStatus {
     /// Parse LP status data from view function response
     pub fn from_view_response(result: &serde_json::Value) -> Result<Self> {
-        // Try to parse as direct number
-        if let Some(num) = result.as_u64() {
-            return Ok(LPStatus { value: num as u8 });
-        }
-
-        // Try to parse as object first (most likely format)
-        if let Ok(raw) = serde_json::from_value::<LPStatusRaw>(result.clone()) {
-            return Ok(raw.into());
-        }
-
-        // Fallback: try to parse as array of strings
-        if let Ok(status_data) = serde_json::from_value::<Vec<String>>(result.clone()) {
-            let raw = LPStatusRaw {
-                value: status_data.get(0).unwrap_or(&"0".to_string()).clone(),
-            };
-            return Ok(raw.into());
-        }
-
-        // Fallback: try to parse as single value
-        if let Some(value_str) = result.as_str() {
-            let raw = LPStatusRaw {
-                value: value_str.to_string(),
-            };
-            return Ok(raw.into());
-        }
-
-        Err(anyhow!(
-            "Failed to parse get_lp_status response: unsupported format. Response: {}",
-            result
-        ))
+        // Parse directly as LPStatus since the JSON contains numeric value
+        let status = serde_json::from_value::<LPStatus>(result.clone())
+            .map_err(|e| anyhow!("Failed to parse get_lp_status response: {}", e))?;
+        Ok(status)
     }
 }
 
@@ -434,14 +337,14 @@ pub struct LPWithdraw {
     pub id: u64,
     pub withdraw_amount: u64,
     pub receiver_addr: String,
-    pub receiver_script_hash: Vec<u8>,
+    pub receiver_script_hash: String,
     pub receive_min_amount: u64,
     pub fee_rate: u64,
     pub timestamp: u64,
     pub lp_id: u64,
 }
 
-/// LP withdraw raw information structure
+/// LP withdraw raw information structure (Move contract returns string values)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LPWithdrawRaw {
     pub id: String,
@@ -460,8 +363,7 @@ impl From<LPWithdrawRaw> for LPWithdraw {
             id: raw.id.parse().unwrap_or(0),
             withdraw_amount: raw.withdraw_amount.parse().unwrap_or(0),
             receiver_addr: raw.receiver_addr,
-            receiver_script_hash: hex::decode(raw.receiver_script_hash.trim_start_matches("0x"))
-                .unwrap_or_default(),
+            receiver_script_hash: raw.receiver_script_hash,
             receive_min_amount: raw.receive_min_amount.parse().unwrap_or(0),
             fee_rate: raw.fee_rate.parse().unwrap_or(0),
             timestamp: raw.timestamp.parse().unwrap_or(0),
@@ -473,30 +375,10 @@ impl From<LPWithdrawRaw> for LPWithdraw {
 impl LPWithdraw {
     /// Parse LP withdraw data from view function response
     pub fn from_view_response(result: &serde_json::Value) -> Result<Self> {
-        // Try to parse as object first (most likely format)
-        if let Ok(raw) = serde_json::from_value::<LPWithdrawRaw>(result.clone()) {
-            return Ok(raw.into());
-        }
-
-        // Fallback: try to parse as array of strings
-        if let Ok(lp_withdraw_data) = serde_json::from_value::<Vec<String>>(result.clone()) {
-            let raw = LPWithdrawRaw {
-                id: lp_withdraw_data.get(0).unwrap_or(&"0".to_string()).clone(),
-                withdraw_amount: lp_withdraw_data.get(1).unwrap_or(&"0".to_string()).clone(),
-                receiver_addr: lp_withdraw_data.get(2).unwrap_or(&"".to_string()).clone(),
-                receiver_script_hash: lp_withdraw_data.get(3).unwrap_or(&"".to_string()).clone(),
-                receive_min_amount: lp_withdraw_data.get(4).unwrap_or(&"0".to_string()).clone(),
-                fee_rate: lp_withdraw_data.get(5).unwrap_or(&"0".to_string()).clone(),
-                timestamp: lp_withdraw_data.get(6).unwrap_or(&"0".to_string()).clone(),
-                lp_id: lp_withdraw_data.get(7).unwrap_or(&"0".to_string()).clone(),
-            };
-            return Ok(raw.into());
-        }
-
-        Err(anyhow!(
-            "Failed to parse get_lp_withdraw response: unsupported format. Response: {}",
-            result
-        ))
+        // Parse as LPWithdrawRaw since Move contract returns string values for numbers
+        let raw = serde_json::from_value::<LPWithdrawRaw>(result.clone())
+            .map_err(|e| anyhow!("Failed to parse get_lp_withdraw response: {}", e))?;
+        Ok(raw.into())
     }
 }
 

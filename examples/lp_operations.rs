@@ -33,8 +33,6 @@ async fn main() -> Result<()> {
         &btc_light_client,
     )?;
 
-    println!("Bridge client created successfully");
-
     // Example 1: Register a new LP
     let register_params = RegisterLPParams {
         lp_id: 1,
@@ -44,12 +42,15 @@ async fn main() -> Result<()> {
         lp_fee: 1000, // 0.1% fee (basis points)
     };
 
-    match client.register_lp(register_params).await {
-        Ok(tx_hash) => println!("LP registered successfully: {}", tx_hash),
-        Err(e) => println!("Failed to register LP: {}", e),
-    }
-
+    let tx_hash = client.register_lp(register_params).await?;
     time::sleep(Duration::from_secs(5)).await;
+
+    let tx = client.get_transaction_by_hash(&tx_hash).await?;
+    if tx.success() {
+        println!("LP registered successfully, hash: {}", tx_hash);
+    } else {
+        println!("LP registered failed, error: {}", tx.vm_status());
+    }
 
     // Example 2: Check LP status
     match client.get_lp_status(1).await {
@@ -59,7 +60,7 @@ async fn main() -> Result<()> {
 
     // Example 3: Withdraw through LP
     let withdraw_params = WithdrawByLPParams {
-        withdraw_id: 12342,
+        withdraw_id: 12350,
         btc_address: "bcrt1phcnl4zcl2fu047pv4wx6y058v8u0n02at6lthvm7pcf2wrvjm5tqatn90k".to_string(),
         receiver_script_hash: hex::decode("a914b7fcce0647b5e26b4a14b6b3b6f8b5e8e8e8e8e8e887")?,
         receive_min_amount: 450000, // 0.0045 BTC minimum
@@ -69,10 +70,9 @@ async fn main() -> Result<()> {
     };
 
     let tx_hash = client.withdraw_by_lp(withdraw_params).await?;
-    println!("Withdraw by lp initiated: {}", tx_hash);
+    time::sleep(Duration::from_secs(5)).await;
 
     let tx = client.get_transaction_by_hash(&tx_hash).await?;
-
     if tx.success() {
         println!("Withdraw by lp transaction successful, hash: {}", tx_hash);
     } else {
@@ -82,16 +82,19 @@ async fn main() -> Result<()> {
         );
     }
 
-    time::sleep(Duration::from_secs(5)).await;
-
     // Example 4: Get LP withdraw information
-    match client.get_lp_withdraw(12342).await {
+    match client.get_lp_withdraw(12350).await {
         Ok(withdraw_info) => {
             println!("Withdraw info:");
             println!("  ID: {}", withdraw_info.id);
             println!("  Amount: {}", withdraw_info.withdraw_amount);
             println!("  Receiver: {}", withdraw_info.receiver_addr);
             println!("  LP ID: {}", withdraw_info.lp_id);
+            println!(
+                "  Receiver script hash: {}",
+                withdraw_info.receiver_script_hash
+            );
+            println!("  Receive min amount: {}", withdraw_info.receive_min_amount);
             println!("  Fee rate: {}", withdraw_info.fee_rate);
             println!("  Timestamp: {}", withdraw_info.timestamp);
         }
@@ -101,7 +104,7 @@ async fn main() -> Result<()> {
     // Example 5: Claim LP withdraw (owner only)
     // This would typically be called by the bridge operator after confirming the BTC transaction
     let claim_params = ClaimLPWithdrawParams {
-        withdraw_id: 12342,
+        withdraw_id: 12350,
         block_num: 800000,
         tx_out_ix: 0,
         amount_sats: 460000, // Amount actually received (after fees)
@@ -115,10 +118,9 @@ async fn main() -> Result<()> {
     };
 
     let tx_hash = client.claim_lp_withdraw(claim_params).await?;
-    println!("LP withdraw claimed: {}", tx_hash);
+    time::sleep(Duration::from_secs(5)).await;
 
     let tx = client.get_transaction_by_hash(&tx_hash).await?;
-
     if tx.success() {
         println!("LP withdraw claimed, hash: {}", tx_hash);
     } else {

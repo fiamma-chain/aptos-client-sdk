@@ -51,16 +51,14 @@ async fn main() -> Result<()> {
 }
 
 fn create_example_peg() -> Result<Peg> {
-    let tx_id = "0x46724ae173f0c183e974fab2f582701c9d0e0e896a93e3e970d8710f870d28c9";
-    let tx_id_bytes = hex::decode(tx_id.trim_start_matches("0x")).unwrap();
     let peg = Peg {
         to: "0x2823126c1fd6124b0496b89dcb1de2ae0a71011baadf058c6a12ee22d0024cbe".to_string(),
         value: 500000,
         // For Local testing, we don't need to provide the block number and inclusion proof
         block_num: 0,
         inclusion_proof: TxProof {
-            block_header: vec![0x23],
-            tx_id: tx_id_bytes,
+            block_header: vec![0x99],
+            tx_id: vec![0x26],
             tx_index: 0,
             merkle_proof: vec![],
             raw_tx: vec![],
