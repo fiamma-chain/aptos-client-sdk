@@ -37,7 +37,7 @@ pub struct BridgeClient {
     /// Bridge contract address
     bridge_contract_address: AccountAddress,
     /// BTC Light client
-    btc_light_client: AccountAddress,
+    btc_light_client: Option<AccountAddress>,
 }
 
 impl BridgeClient {
@@ -47,12 +47,14 @@ impl BridgeClient {
         aptos_api_key: Option<&str>,
         private_key_hex: &str,
         bridge_contract_address: &str,
-        btc_light_client: &str,
+        btc_light_client: Option<&str>,
     ) -> Result<Self> {
         // Parse contract address
         let bridge_contract_address = parse_account_address(bridge_contract_address)?;
 
-        let btc_light_client = parse_account_address(btc_light_client)?;
+        let btc_light_client = btc_light_client
+            .map(|s| parse_account_address(s))
+            .transpose()?;
 
         let aptos_base_url = AptosBaseUrl::Custom(
             Url::parse(node_url)
@@ -263,11 +265,19 @@ impl BridgeClient {
 
     /// Get latest block height from BTC light client
     pub async fn get_latest_block_height(&self) -> Result<u64> {
+        if self.btc_light_client.is_none() {
+            return Err(anyhow!(
+                "Aptos Bridge: BTC light client is not set. Please set the BTC light client address when creating the BridgeClient."
+            ));
+        }
+
+        let btc_light_client = self.btc_light_client.unwrap();
+
         // Construct the view function call
         let view_request = ViewRequest {
             function: EntryFunctionId {
                 module: MoveModuleId {
-                    address: self.btc_light_client.into(),
+                    address: btc_light_client.into(),
                     name: IdentifierWrapper(Identifier::new("btc_mirror").unwrap()),
                 },
                 name: IdentifierWrapper(Identifier::new("get_latest_block_height").unwrap()),
@@ -370,6 +380,51 @@ impl BridgeClient {
 
         // Parse LP status data using the struct method
         LPStatus::from_view_response(result)
+    }
+
+    /// Get BTC peg balance with the given address
+    pub async fn get_btc_peg_balance(&self, address: &str) -> Result<u64> {
+        // Construct the view function call
+        let view_request = ViewRequest {
+            function: EntryFunctionId {
+                module: MoveModuleId {
+                    address: self.bridge_contract_address.into(),
+                    name: IdentifierWrapper(Identifier::new("btc_peg").unwrap()),
+                },
+                name: IdentifierWrapper(Identifier::new("balance_of").unwrap()),
+            },
+            type_arguments: vec![],
+            arguments: vec![serde_json::to_value(&address)?],
+        };
+
+        // Call the view function
+        let response = self
+            .rest_client
+            .view(&view_request, None)
+            .await
+            .map_err(|e| anyhow!("Failed to call get_btc_peg_balance view function: {}", e))?;
+
+        // Parse the response
+        let result = response
+            .inner()
+            .get(0)
+            .ok_or_else(|| anyhow!("No response from get_btc_peg_balance view function"))?;
+
+        // Parse as string then convert to u64
+        let str_val: String = serde_json::from_value(result.clone()).map_err(|e| {
+            anyhow!(
+                "Failed to parse latest_block_height response as string: {}",
+                e
+            )
+        })?;
+        let balance: u64 = str_val.parse().map_err(|e| {
+            anyhow!(
+                "Failed to convert get_btc_peg_balance response as string to u64: {}",
+                e
+            )
+        })?;
+
+        Ok(balance)
     }
 
     /// Generic method for executing transactions

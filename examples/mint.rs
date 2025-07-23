@@ -27,7 +27,7 @@ async fn main() -> Result<()> {
         aptos_api_key.as_deref(),
         &private_key,
         &bridge_contract_address,
-        &btc_light_client,
+        Some(&btc_light_client),
     )?;
 
     // Create example peg
@@ -35,6 +35,9 @@ async fn main() -> Result<()> {
 
     // Display peg information
     println!("Peg: {} satoshi to {}", peg.value, peg.to);
+
+    // Save the address before moving peg
+    let peg_address = peg.to.clone();
 
     // Execute mint operation
     let tx_hash = bridge_client.mint(peg).await?;
@@ -46,6 +49,12 @@ async fn main() -> Result<()> {
     } else {
         println!("Mint transaction failed, error: {}", tx.vm_status());
     }
+
+    time::sleep(Duration::from_secs(5)).await;
+
+    // Query the balance of the peg
+    let balance = bridge_client.get_btc_peg_balance(&peg_address).await?;
+    println!("BTC peg balance: {} satoshi", balance);
 
     Ok(())
 }

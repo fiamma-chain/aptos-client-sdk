@@ -65,7 +65,7 @@ async fn test_bridge_client_methods() -> Result<()> {
         aptos_api_key.as_deref(),
         &private_key,
         bridge_contract_address,
-        btc_light_client,
+        Some(&btc_light_client),
     )?;
 
     // Test get_min_confirmations

@@ -30,7 +30,7 @@ async fn main() -> Result<()> {
         aptos_api_key.as_deref(),
         &private_key,
         &bridge_contract_address,
-        &btc_light_client,
+        Some(&btc_light_client),
     )?;
 
     // Example 1: Register a new LP

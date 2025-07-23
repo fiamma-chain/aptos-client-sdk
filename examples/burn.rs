@@ -24,7 +24,7 @@ async fn main() -> Result<()> {
         aptos_api_key.as_deref(),
         &private_key,
         &bridge_contract_address,
-        &btc_light_client,
+        Some(&btc_light_client),
     )?;
     // Burn operation parameters
     let btc_address = "bcrt1phcnl4zcl2fu047pv4wx6y058v8u0n02at6lthvm7pcf2wrvjm5tqatn90k";
