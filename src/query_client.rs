@@ -2,7 +2,7 @@
 //!
 //! Provides functionality to query Aptos Bridge contract configuration and status.
 
-use crate::types::{parse_burn_event, parse_mint_event, BridgeEvent};
+use crate::types::{parse_burn_event, parse_mint_event, parse_withdraw_by_lp_event, BridgeEvent};
 use anyhow::{anyhow, Result};
 use aptos_sdk::{
     crypto::HashValue,
@@ -121,6 +121,12 @@ impl QueryClient {
         if event_type.ends_with("::bridge::Burn") {
             let burn_event = parse_burn_event(&event.data)?;
             return Ok(Some(BridgeEvent::Burn(burn_event)));
+        }
+
+        // Parse WithdrawByLPEvents
+        if event_type.ends_with("::bridge::WithdrawByLP") {
+            let withdraw_by_lp_event = parse_withdraw_by_lp_event(&event.data)?;
+            return Ok(Some(BridgeEvent::WithdrawByLP(withdraw_by_lp_event)));
         }
 
         // Not a bridge event we're interested in
