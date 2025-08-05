@@ -7,7 +7,9 @@ use anyhow::{anyhow, Result};
 use aptos_sdk::{
     crypto::HashValue,
     rest_client::{aptos_api_types::Event, AptosBaseUrl, Client, ClientBuilder, Transaction},
+    types::account_address::AccountAddress,
 };
+use std::str::FromStr;
 use url::Url;
 
 /// Query client
@@ -107,10 +109,25 @@ impl QueryClient {
     ) -> Result<Option<BridgeEvent>> {
         let event_type = &event.typ.to_string();
 
-        // Check if this event is from our bridge contract
-        if !event_type.starts_with(&format!("{}::", bridge_contract_address)) {
+        // Parse and normalize contract addresses using Aptos SDK
+        let expected_addr = AccountAddress::from_str(bridge_contract_address)
+            .map_err(|e| anyhow!("Invalid bridge contract address: {}", e))?;
+
+        // Extract contract address from event type
+        let event_addr_str = if let Some(pos) = event_type.find("::") {
+            &event_type[..pos]
+        } else {
+            return Ok(None);
+        };
+
+        let event_addr = AccountAddress::from_str(event_addr_str)
+            .map_err(|e| anyhow!("Invalid event contract address: {}", e))?;
+
+        // Compare normalized addresses
+        if event_addr != expected_addr {
             return Ok(None);
         }
+
         // Parse Mint events
         if event_type.ends_with("::bridge::Mint") {
             let mint_event = parse_mint_event(&event.data)?;
@@ -123,7 +140,7 @@ impl QueryClient {
             return Ok(Some(BridgeEvent::Burn(burn_event)));
         }
 
-        // Parse WithdrawByLPEvents
+        // Parse WithdrawByLP events
         if event_type.ends_with("::bridge::WithdrawByLP") {
             let withdraw_by_lp_event = parse_withdraw_by_lp_event(&event.data)?;
             return Ok(Some(BridgeEvent::WithdrawByLP(withdraw_by_lp_event)));

@@ -10,14 +10,14 @@ use std::env;
 async fn main() -> Result<()> {
     dotenv::dotenv().ok();
     // Initialize query client
-    let node_url = "https://fullnode.testnet.aptoslabs.com/v1";
+    let node_url = "https://fullnode.mainnet.aptoslabs.com/v1";
     let aptos_api_key = env::var("APTOS_API_KEY").ok();
     let query_client = QueryClient::new(node_url, aptos_api_key.as_deref())?;
 
     let bridge_contract_address =
-        "0xeed4b8e27b6bd68e902e0e20633814d0d6d1a1c096763507fcaf058854a5b9b4";
+        "0x094ff62f3aca82c9f6cb5f80d987f18ea834692425f97aaa4bdf8f73c3c0a7ee";
 
-    let tx_hash = "0x068e942ec3312ba5dd735392c5cc7091561a535a736ead923149cea057de7912";
+    let tx_hash = "0x4c6da6a7ed2ab8307f3723abe3f3e1ed4214ccbd34fa6b16f2ab3c9132e550a3";
 
     match query_client
         .get_bridge_events_by_hash(tx_hash, bridge_contract_address)
