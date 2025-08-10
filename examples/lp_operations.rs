@@ -6,6 +6,7 @@ use anyhow::Result;
 use aptos_client_sdk::{
     BridgeClient, ClaimLPWithdrawParams, RegisterLPParams, TxProof, WithdrawByLPParams,
 };
+use aptos_sdk::rest_client::aptos_api_types::TransactionData;
 use std::{env, time::Duration};
 use tokio::time;
 
@@ -46,10 +47,18 @@ async fn main() -> Result<()> {
     time::sleep(Duration::from_secs(5)).await;
 
     let tx = client.get_transaction_by_hash(&tx_hash).await?;
-    if tx.success() {
-        println!("LP registered successfully, hash: {}", tx_hash);
-    } else {
-        println!("LP registered failed, error: {}", tx.vm_status());
+    match tx {
+        TransactionData::OnChain(txn) => {
+            let status = txn.info.status();
+            if status.is_success() {
+                println!("LP registered successfully, hash: {}", tx_hash);
+            } else {
+                println!("LP registered failed, error: {:?}", status);
+            }
+        }
+        TransactionData::Pending(_) => {
+            println!("LP register transaction is still pending: {}", tx_hash);
+        }
     }
 
     // Example 2: Check LP status
@@ -73,13 +82,18 @@ async fn main() -> Result<()> {
     time::sleep(Duration::from_secs(5)).await;
 
     let tx = client.get_transaction_by_hash(&tx_hash).await?;
-    if tx.success() {
-        println!("Withdraw by lp transaction successful, hash: {}", tx_hash);
-    } else {
-        println!(
-            "Withdraw by lp transaction failed, error: {}",
-            tx.vm_status()
-        );
+    match tx {
+        TransactionData::OnChain(txn) => {
+            let status = txn.info.status();
+            if status.is_success() {
+                println!("Withdraw by lp transaction successful, hash: {}", tx_hash);
+            } else {
+                println!("Withdraw by lp transaction failed, error: {:?}", status);
+            }
+        }
+        TransactionData::Pending(_) => {
+            println!("Withdraw by lp transaction is still pending: {}", tx_hash);
+        }
     }
 
     // Example 4: Get LP withdraw information
@@ -121,10 +135,18 @@ async fn main() -> Result<()> {
     time::sleep(Duration::from_secs(5)).await;
 
     let tx = client.get_transaction_by_hash(&tx_hash).await?;
-    if tx.success() {
-        println!("LP withdraw claimed, hash: {}", tx_hash);
-    } else {
-        println!("LP withdraw claimed failed, error: {}", tx.vm_status());
+    match tx {
+        TransactionData::OnChain(txn) => {
+            let status = txn.info.status();
+            if status.is_success() {
+                println!("LP withdraw claimed, hash: {}", tx_hash);
+            } else {
+                println!("LP withdraw claimed failed, error: {:?}", status);
+            }
+        }
+        TransactionData::Pending(_) => {
+            println!("LP withdraw claim is still pending: {}", tx_hash);
+        }
     }
 
     Ok(())

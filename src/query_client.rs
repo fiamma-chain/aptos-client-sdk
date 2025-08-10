@@ -2,16 +2,16 @@
 //!
 //! Provides functionality to query Aptos Bridge contract configuration and status.
 
-use crate::types::{parse_burn_event, parse_mint_event, parse_withdraw_by_lp_event, BridgeEvent};
+use crate::types::{BridgeEvent, BurnEventBCS, MintEventBCS, WithdrawByLPEventBCS};
 use anyhow::{anyhow, Result};
 use aptos_sdk::{
     crypto::HashValue,
-    rest_client::{aptos_api_types::Event, AptosBaseUrl, Client, ClientBuilder, Transaction},
-    types::account_address::AccountAddress,
+    rest_client::{aptos_api_types::TransactionData, AptosBaseUrl, Client, ClientBuilder},
+    types::{account_address::AccountAddress, contract_event::ContractEvent},
 };
+
 use std::str::FromStr;
 use url::Url;
-
 /// Query client
 pub struct QueryClient {
     /// REST client
@@ -35,14 +35,14 @@ impl QueryClient {
     }
 
     /// Query transaction status
-    pub async fn get_transaction_by_hash(&self, tx_hash: &str) -> Result<Transaction> {
+    pub async fn get_transaction_by_hash(&self, tx_hash: &str) -> Result<TransactionData> {
         // Parse transaction hash
         let tx_hash = HashValue::from_hex(tx_hash.trim_start_matches("0x"))
             .map_err(|e| anyhow!("Invalid transaction hash '{}': {}", tx_hash, e))?;
 
         let response = self
             .rest_client
-            .get_transaction_by_hash(tx_hash)
+            .get_transaction_by_hash_bcs(tx_hash)
             .await
             .map_err(|e| anyhow!("Failed to get transaction from Aptos node: {}", e))?;
 
@@ -52,7 +52,7 @@ impl QueryClient {
     pub async fn get_tx_hash_by_version(&self, version: u64) -> Result<String> {
         let response = self
             .rest_client
-            .get_transaction_by_version(version)
+            .get_transaction_by_version_bcs(version)
             .await
             .map_err(|e| {
                 anyhow!(
@@ -61,14 +61,15 @@ impl QueryClient {
                     e
                 )
             })?;
-        let tx_info = response.inner().transaction_info().map_err(|e| {
-            anyhow!(
-                "Failed to get transaction info for version {}: {}",
+
+        match response.into_inner() {
+            TransactionData::OnChain(txn) => Ok(txn.info.transaction_hash().to_hex_literal()),
+            other => Err(anyhow!(
+                "Transaction at version {} is not on-chain (got {:?})",
                 version,
-                e
-            )
-        })?;
-        Ok(tx_info.hash.to_string())
+                other
+            )),
+        }
     }
 
     /// Get bridge events from user transaction hash
@@ -82,7 +83,7 @@ impl QueryClient {
 
         // Only process user transactions
         let events = match transaction {
-            Transaction::UserTransaction(user_tx) => user_tx.events,
+            TransactionData::OnChain(txn) => txn.events,
             _ => {
                 return Err(anyhow!(
                     "Transaction {} is not a user transaction. Only user and not pending transactions are supported.",
@@ -101,21 +102,22 @@ impl QueryClient {
         Ok(bridge_events)
     }
 
-    /// Parse a single event to check if it's a bridge event
+    /// Parse a single event to check if it's a bridge event using BCS directly
     fn parse_bridge_event(
         &self,
-        event: &Event,
+        event: &ContractEvent,
         bridge_contract_address: &str,
     ) -> Result<Option<BridgeEvent>> {
-        let event_type = &event.typ.to_string();
+        let event_type_tag = event.type_tag();
+        let event_type_str = event_type_tag.to_canonical_string();
 
         // Parse and normalize contract addresses using Aptos SDK
         let expected_addr = AccountAddress::from_str(bridge_contract_address)
             .map_err(|e| anyhow!("Invalid bridge contract address: {}", e))?;
 
         // Extract contract address from event type
-        let event_addr_str = if let Some(pos) = event_type.find("::") {
-            &event_type[..pos]
+        let event_addr_str = if let Some(pos) = event_type_str.find("::") {
+            &event_type_str[..pos]
         } else {
             return Ok(None);
         };
@@ -128,25 +130,40 @@ impl QueryClient {
             return Ok(None);
         }
 
-        // Parse Mint events
-        if event_type.ends_with("::bridge::Mint") {
-            let mint_event = parse_mint_event(&event.data)?;
-            return Ok(Some(BridgeEvent::Mint(mint_event)));
-        }
+        let event_data = event.event_data();
 
-        // Parse Burn events
-        if event_type.ends_with("::bridge::Burn") {
-            let burn_event = parse_burn_event(&event.data)?;
-            return Ok(Some(BridgeEvent::Burn(burn_event)));
-        }
+        // Parse BCS event data directly based on event type
+        let bridge_event = if event_type_str.ends_with("::bridge::Mint") {
+            let mint_bcs: MintEventBCS = bcs::from_bytes(event_data).map_err(|e| {
+                anyhow!(
+                    "Failed to deserialize mint event data: {} (type: {})",
+                    e,
+                    event_type_str
+                )
+            })?;
+            BridgeEvent::Mint(mint_bcs.into())
+        } else if event_type_str.ends_with("::bridge::Burn") {
+            let burn_bcs: BurnEventBCS = bcs::from_bytes(event_data).map_err(|e| {
+                anyhow!(
+                    "Failed to deserialize burn event data: {} (type: {})",
+                    e,
+                    event_type_str
+                )
+            })?;
+            BridgeEvent::Burn(burn_bcs.into())
+        } else if event_type_str.ends_with("::bridge::WithdrawByLP") {
+            let withdraw_bcs: WithdrawByLPEventBCS = bcs::from_bytes(event_data).map_err(|e| {
+                anyhow!(
+                    "Failed to deserialize withdraw event data: {} (type: {})",
+                    e,
+                    event_type_str
+                )
+            })?;
+            BridgeEvent::WithdrawByLP(withdraw_bcs.into())
+        } else {
+            return Ok(None);
+        };
 
-        // Parse WithdrawByLP events
-        if event_type.ends_with("::bridge::WithdrawByLP") {
-            let withdraw_by_lp_event = parse_withdraw_by_lp_event(&event.data)?;
-            return Ok(Some(BridgeEvent::WithdrawByLP(withdraw_by_lp_event)));
-        }
-
-        // Not a bridge event we're interested in
-        Ok(None)
+        Ok(Some(bridge_event))
     }
 }

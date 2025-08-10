@@ -17,7 +17,7 @@ async fn main() -> Result<()> {
     let bridge_contract_address =
         "0x094ff62f3aca82c9f6cb5f80d987f18ea834692425f97aaa4bdf8f73c3c0a7ee";
 
-    let tx_hash = "0x4c6da6a7ed2ab8307f3723abe3f3e1ed4214ccbd34fa6b16f2ab3c9132e550a3";
+    let tx_hash = "0xa67e4ae484a47ac36acb3009ba8f2982ffde7ff6e4ff0f8121dc8ff6f88b9a3e";
 
     match query_client
         .get_bridge_events_by_hash(tx_hash, bridge_contract_address)
@@ -41,6 +41,16 @@ async fn main() -> Result<()> {
     // Test BridgeClient methods
     println!("\n--- Testing BridgeClient methods ---");
     test_bridge_client_methods().await?;
+
+    // Test get_tx_hash_by_version
+    match query_client.get_tx_hash_by_version(3198915086).await {
+        Ok(tx_hash) => {
+            println!("✅ Transaction hash: {}", tx_hash);
+        }
+        Err(e) => {
+            println!("❌ Error getting transaction hash: {}", e);
+        }
+    }
 
     Ok(())
 }

@@ -3,6 +3,7 @@
 //! This module defines all data types required for interacting with Aptos Bridge contracts.
 
 use anyhow::{anyhow, Result};
+use aptos_sdk::types::account_address::AccountAddress;
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
@@ -269,6 +270,101 @@ impl From<WithdrawByLPEventRaw> for WithdrawByLPEvent {
             timestamp: raw.timestamp.and_then(|t| parse_timestamp(&t)),
             version: raw.version.and_then(|v| v.parse().ok()),
             transaction_hash: raw.transaction_hash,
+        }
+    }
+}
+
+/// BCS-compatible Mint event structure
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct MintEventBCS {
+    pub to_address: [u8; 32], // AccountAddress as fixed-size array
+    pub amount: u64,
+    pub btc_tx_id: Vec<u8>,
+    pub btc_block_num: u64,
+}
+
+/// BCS-compatible Burn event structure  
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct BurnEventBCS {
+    pub from_address: [u8; 32], // AccountAddress as fixed-size array
+    pub btc_address: String,
+    pub fee_rate: u64,
+    pub amount: u64,
+    pub operator_id: u64,
+}
+
+/// BCS-compatible WithdrawByLP event structure
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct WithdrawByLPEventBCS {
+    pub from_address: [u8; 32], // AccountAddress as fixed-size array
+    pub withdraw_id: u64,
+    pub btc_address: String, // BCS will handle variable-length encoding
+    pub fee_rate: u64,
+    pub amount: u64,
+    pub lp_id: u64,
+    pub receive_min_amount: u64,
+}
+
+impl From<MintEventBCS> for MintEvent {
+    fn from(bcs: MintEventBCS) -> Self {
+        // Convert AccountAddress bytes to hex string with fallback
+        let to_address = AccountAddress::from_bytes(&bcs.to_address)
+            .map(|addr| addr.to_hex_literal())
+            .unwrap_or_else(|_| format!("0x{}", hex::encode(&bcs.to_address)));
+
+        // Convert btc_tx_id bytes to hex string
+        let btc_tx_id = hex::encode(&bcs.btc_tx_id);
+
+        MintEvent {
+            to_address,
+            amount: bcs.amount,
+            btc_tx_id,
+            btc_block_num: bcs.btc_block_num,
+            timestamp: None, // Not available in BCS events
+            version: None,
+            transaction_hash: None,
+        }
+    }
+}
+
+impl From<BurnEventBCS> for BurnEvent {
+    fn from(bcs: BurnEventBCS) -> Self {
+        // Convert AccountAddress bytes to hex string with fallback
+        let from_address = AccountAddress::from_bytes(&bcs.from_address)
+            .map(|addr| addr.to_hex_literal())
+            .unwrap_or_else(|_| format!("0x{}", hex::encode(&bcs.from_address)));
+
+        BurnEvent {
+            from_address,
+            btc_address: bcs.btc_address,
+            fee_rate: bcs.fee_rate,
+            amount: bcs.amount,
+            operator_id: bcs.operator_id,
+            timestamp: None, // Not available in BCS events
+            version: None,
+            transaction_hash: None,
+        }
+    }
+}
+
+impl From<WithdrawByLPEventBCS> for WithdrawByLPEvent {
+    fn from(bcs: WithdrawByLPEventBCS) -> Self {
+        // Convert AccountAddress bytes to hex string with fallback
+        let from_address = AccountAddress::from_bytes(&bcs.from_address)
+            .map(|addr| addr.to_hex_literal())
+            .unwrap_or_else(|_| format!("0x{}", hex::encode(&bcs.from_address)));
+
+        WithdrawByLPEvent {
+            from_address,
+            withdraw_id: bcs.withdraw_id,
+            btc_address: bcs.btc_address,
+            fee_rate: bcs.fee_rate,
+            amount: bcs.amount,
+            lp_id: bcs.lp_id,
+            receive_min_amount: bcs.receive_min_amount,
+            timestamp: None, // Not available in BCS events
+            version: None,
+            transaction_hash: None,
         }
     }
 }

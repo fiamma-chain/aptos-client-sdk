@@ -7,6 +7,7 @@ use aptos_client_sdk::{
     types::{Peg, ScriptType, TxProof},
     BridgeClient,
 };
+use aptos_sdk::rest_client::aptos_api_types::TransactionData;
 use std::{env, time::Duration};
 use tokio::time;
 
@@ -41,13 +42,19 @@ async fn main() -> Result<()> {
 
     // Execute mint operation
     let tx_hash = bridge_client.mint(peg).await?;
-    time::sleep(Duration::from_secs(5)).await;
     let tx = bridge_client.get_transaction_by_hash(&tx_hash).await?;
-
-    if tx.success() {
-        println!("Mint transaction successful, hash: {}", tx_hash);
-    } else {
-        println!("Mint transaction failed, error: {}", tx.vm_status());
+    match tx {
+        TransactionData::OnChain(txn) => {
+            let status = txn.info.status();
+            if status.is_success() {
+                println!("Mint transaction successful, hash: {}", tx_hash);
+            } else {
+                println!("Mint transaction failed, error: {:?}", status);
+            }
+        }
+        TransactionData::Pending(_) => {
+            println!("Mint transaction is still pending: {}", tx_hash);
+        }
     }
 
     time::sleep(Duration::from_secs(5)).await;
@@ -67,7 +74,7 @@ fn create_example_peg() -> Result<Peg> {
         block_num: 0,
         inclusion_proof: TxProof {
             block_header: vec![0x99],
-            tx_id: vec![0x28],
+            tx_id: vec![0x29],
             tx_index: 0,
             merkle_proof: vec![],
             raw_tx: vec![],

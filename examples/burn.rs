@@ -4,6 +4,7 @@
 
 use anyhow::Result;
 use aptos_client_sdk::BridgeClient;
+use aptos_sdk::rest_client::aptos_api_types::TransactionData;
 use std::{env, time::Duration};
 use tokio::time;
 
@@ -39,10 +40,18 @@ async fn main() -> Result<()> {
 
     time::sleep(Duration::from_secs(5)).await;
     let tx = bridge_client.get_transaction_by_hash(&tx_hash).await?;
-    if tx.success() {
-        println!("Burn transaction successful, hash: {}", tx_hash);
-    } else {
-        println!("Burn transaction failed, error: {}", tx.vm_status());
+    match tx {
+        TransactionData::OnChain(txn) => {
+            let status = txn.info.status();
+            if status.is_success() {
+                println!("Burn transaction successful, hash: {}", tx_hash);
+            } else {
+                println!("Burn transaction failed, error: {:?}", status);
+            }
+        }
+        TransactionData::Pending(_) => {
+            println!("Burn transaction is still pending: {}", tx_hash);
+        }
     }
 
     Ok(())
