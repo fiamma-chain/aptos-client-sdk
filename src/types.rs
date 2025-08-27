@@ -23,14 +23,6 @@ pub struct TxProof {
     pub raw_tx: Vec<u8>,
 }
 
-/// Bitcoin script type
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum ScriptType {
-    P2SH = 0,  // Pay to Script Hash
-    P2WSH = 1, // Pay to Witness Script Hash
-    P2TR = 2,  // Pay to Taproot
-}
-
 /// Peg structure for mint operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Peg {
@@ -46,8 +38,6 @@ pub struct Peg {
     pub tx_out_ix: u64,
     /// Destination script hash
     pub dest_script_hash: Vec<u8>,
-    /// Script type
-    pub script_type: ScriptType,
 }
 
 impl Peg {
@@ -56,13 +46,6 @@ impl Peg {
         // Convert address string to AccountAddress
         let to_address = aptos_sdk::types::account_address::AccountAddress::from_str(&self.to)
             .map_err(|e| anyhow!("Invalid address format '{}': {}", self.to, e))?;
-
-        // Convert script type to u8
-        let script_type_u8 = match self.script_type {
-            ScriptType::P2SH => 0u8,
-            ScriptType::P2WSH => 1u8,
-            ScriptType::P2TR => 2u8,
-        };
 
         // Serialize each parameter according to contract requirements
         let args = vec![
@@ -75,8 +58,6 @@ impl Peg {
                 .map_err(|e| anyhow!("Failed to serialize tx_index: {}", e))?,
             bcs::to_bytes(&self.tx_out_ix)
                 .map_err(|e| anyhow!("Failed to serialize tx_out_ix: {}", e))?,
-            bcs::to_bytes(&script_type_u8)
-                .map_err(|e| anyhow!("Failed to serialize script_type: {}", e))?,
             bcs::to_bytes(&self.inclusion_proof.block_header)
                 .map_err(|e| anyhow!("Failed to serialize block_header: {}", e))?,
             bcs::to_bytes(&self.inclusion_proof.tx_id)

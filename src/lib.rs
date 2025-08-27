@@ -12,5 +12,5 @@ pub use query_client::QueryClient;
 // Re-export main data types (excluding error types)
 pub use types::{
     BridgeEvent, BurnEvent, ClaimLPWithdrawParams, LPInfo, LPStatus, LPWithdraw, MintEvent, Peg,
-    RegisterLPParams, ScriptType, TxProof, WithdrawByLPEvent, WithdrawByLPParams,
+    RegisterLPParams, TxProof, WithdrawByLPEvent, WithdrawByLPParams,
 };

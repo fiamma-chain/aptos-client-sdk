@@ -4,7 +4,7 @@
 
 use anyhow::Result;
 use aptos_client_sdk::{
-    types::{Peg, ScriptType, TxProof},
+    types::{Peg, TxProof},
     BridgeClient,
 };
 use aptos_sdk::rest_client::aptos_api_types::TransactionData;
@@ -81,7 +81,6 @@ fn create_example_peg() -> Result<Peg> {
         },
         tx_out_ix: 0,
         dest_script_hash: vec![],
-        script_type: ScriptType::P2WSH,
     };
 
     Ok(peg)
