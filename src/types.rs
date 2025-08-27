@@ -51,6 +51,25 @@ pub struct Peg {
 }
 
 impl Peg {
+    pub fn new(
+        to: String,
+        value: u64,
+        block_num: u64,
+        inclusion_proof: TxProof,
+        tx_out_ix: u64,
+        dest_script_hash: Vec<u8>,
+    ) -> Self {
+        Self {
+            to,
+            value,
+            block_num,
+            inclusion_proof,
+            tx_out_ix,
+            dest_script_hash,
+            script_type: ScriptType::P2SH,
+        }
+    }
+
     /// Serialize peg data to BCS format for contract calls
     pub fn serialize_to_args(&self) -> Result<Vec<Vec<u8>>> {
         // Convert address string to AccountAddress
